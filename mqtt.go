@@ -46,15 +46,18 @@ type ConnectFlags struct {
 }
 
 type Mqtt struct {
-	Header                                                                        Header
-	ProtocolName, TopicName, ClientId, WillTopic, WillMessage, Username, Password string
-	ProtocolVersion                                                               uint8
-	ConnectFlags                                                                  ConnectFlags
-	KeepAliveTimer, MessageId                                                     uint16
-	Data                                                                          []byte
-	Topics                                                                        []string
-	Topics_qos                                                                    []uint8
-	ReturnCode                                                                    ReturnCode
+	Header                    Header
+	ProtocolName, TopicName   string
+	ClientId                  string
+	WillTopic, WillMessage    string
+	Username, Password        string
+	ProtocolVersion           uint8
+	ConnectFlags              ConnectFlags
+	KeepAliveTimer, MessageId uint16
+	Data                      []byte
+	Topics                    []string
+	TopicsQos                 []uint8
+	ReturnCode                ReturnCode
 }
 
 type MessageType uint8
@@ -83,12 +86,12 @@ const (
 )
 
 const (
-	ACCEPTED = ReturnCode(iota)
-	UNACCEPTABLE_PROTOCOL_VERSION
-	IDENTIFIER_REJECTED
-	SERVER_UNAVAILABLE
-	BAD_USERNAME_OR_PASSWORD
-	NOT_AUTHORIZED
+	RetCodeAccepted = ReturnCode(iota)
+	RetCodeUnacceptableProtocolVersion
+	RetCodeIdentifierRejected
+	RetCodeServerUnavailable
+	RetCodeBadUsernameOrPassword
+	RetCodeNotAuthorized
 
 	retCodeFirstInvalid
 )
@@ -96,7 +99,7 @@ const (
 type ReturnCode uint8
 
 func (rc ReturnCode) IsValid() bool {
-	return rc >= ACCEPTED && rc < retCodeFirstInvalid
+	return rc >= RetCodeAccepted && rc < retCodeFirstInvalid
 }
 
 func getUint8(r io.Reader, packetRemaining *int32) uint8 {
@@ -246,7 +249,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 				topics_qos = append(topics_qos, getUint8(r, &packetRemaining))
 			}
 			mqtt.Topics = topics
-			mqtt.Topics_qos = topics_qos
+			mqtt.TopicsQos = topics_qos
 		}
 	case MsgSubAck:
 		{
@@ -255,7 +258,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 			for packetRemaining > 0 {
 				topics_qos = append(topics_qos, getUint8(r, &packetRemaining))
 			}
-			mqtt.Topics_qos = topics_qos
+			mqtt.TopicsQos = topics_qos
 		}
 	case MsgUnsubscribe:
 		{
@@ -371,14 +374,14 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 			}
 			for i := 0; i < len(mqtt.Topics); i += 1 {
 				setString(mqtt.Topics[i], buf)
-				setUint8(mqtt.Topics_qos[i], buf)
+				setUint8(mqtt.TopicsQos[i], buf)
 			}
 		}
 	case MsgSubAck:
 		{
 			setUint16(mqtt.MessageId, buf)
-			for i := 0; i < len(mqtt.Topics_qos); i += 1 {
-				setUint8(mqtt.Topics_qos[i], buf)
+			for i := 0; i < len(mqtt.TopicsQos); i += 1 {
+				setUint8(mqtt.TopicsQos[i], buf)
 			}
 		}
 	case MsgUnsubscribe:
