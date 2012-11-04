@@ -7,10 +7,13 @@ import (
 )
 
 var (
-	badMsgTypeError        = errors.New("mqtt: message Type is invalid!")
+	badMsgTypeError        = errors.New("mqtt: message type is invalid")
+	badQosError            = errors.New("mqtt: QoS is invalid")
+	badWillQosError        = errors.New("mqtt: will QoS is invalid")
 	badLengthEncodingError = errors.New("mqtt: remaining length field exceeded maximum of 4 bytes")
-	badReturnCodeError     = errors.New("mqtt: is invalid!")
+	badReturnCodeError     = errors.New("mqtt: is invalid")
 	dataExceedsPacketError = errors.New("mqtt: data exceeds packet length")
+	msgTooLongError        = errors.New("mqtt: message is too long")
 )
 
 const (
@@ -310,92 +313,111 @@ func boolToByte(val bool) byte {
 }
 
 func Encode(mqtt *Mqtt) ([]byte, error) {
-	err := valid(mqtt)
-	if err != nil {
-		return nil, err
+	buf := new(bytes.Buffer)
+	err := EncodeWrite(buf, mqtt)
+	return buf.Bytes(), err
+}
+
+func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
+	defer func() {
+		err = recoverError(err)
+	}()
+
+	if err = valid(mqtt); err != nil {
+		return
 	}
-	var headerbuf, buf bytes.Buffer
-	setHeader(&mqtt.Header, &headerbuf)
+
+	buf := new(bytes.Buffer)
 	switch mqtt.Header.MessageType {
 	case CONNECT:
 		{
-			setString(mqtt.ProtocolName, &buf)
-			setUint8(mqtt.ProtocolVersion, &buf)
-			setConnectFlags(&mqtt.ConnectFlags, &buf)
-			setUint16(mqtt.KeepAliveTimer, &buf)
-			setString(mqtt.ClientId, &buf)
+			setString(mqtt.ProtocolName, buf)
+			setUint8(mqtt.ProtocolVersion, buf)
+			setConnectFlags(&mqtt.ConnectFlags, buf)
+			setUint16(mqtt.KeepAliveTimer, buf)
+			setString(mqtt.ClientId, buf)
 			if mqtt.ConnectFlags.WillFlag {
-				setString(mqtt.WillTopic, &buf)
-				setString(mqtt.WillMessage, &buf)
+				setString(mqtt.WillTopic, buf)
+				setString(mqtt.WillMessage, buf)
 			}
-			if mqtt.ConnectFlags.UsernameFlag && len(mqtt.Username) > 0 {
-				setString(mqtt.Username, &buf)
+			if mqtt.ConnectFlags.UsernameFlag {
+				setString(mqtt.Username, buf)
 			}
-			if mqtt.ConnectFlags.PasswordFlag && len(mqtt.Password) > 0 {
-				setString(mqtt.Password, &buf)
+			if mqtt.ConnectFlags.PasswordFlag {
+				setString(mqtt.Password, buf)
 			}
 		}
 	case CONNACK:
 		{
 			buf.WriteByte(byte(0))
-			setUint8(uint8(mqtt.ReturnCode), &buf)
+			setUint8(uint8(mqtt.ReturnCode), buf)
 		}
 	case PUBLISH:
 		{
-			setString(mqtt.TopicName, &buf)
+			setString(mqtt.TopicName, buf)
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
-				setUint16(mqtt.MessageId, &buf)
+				setUint16(mqtt.MessageId, buf)
 			}
 			buf.Write(mqtt.Data)
 		}
 	case PUBACK, PUBREC, PUBREL, PUBCOMP, UNSUBACK:
 		{
-			setUint16(mqtt.MessageId, &buf)
+			setUint16(mqtt.MessageId, buf)
 		}
 	case SUBSCRIBE:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
-				setUint16(mqtt.MessageId, &buf)
+				setUint16(mqtt.MessageId, buf)
 			}
 			for i := 0; i < len(mqtt.Topics); i += 1 {
-				setString(mqtt.Topics[i], &buf)
-				setUint8(mqtt.Topics_qos[i], &buf)
+				setString(mqtt.Topics[i], buf)
+				setUint8(mqtt.Topics_qos[i], buf)
 			}
 		}
 	case SUBACK:
 		{
-			setUint16(mqtt.MessageId, &buf)
+			setUint16(mqtt.MessageId, buf)
 			for i := 0; i < len(mqtt.Topics_qos); i += 1 {
-				setUint8(mqtt.Topics_qos[i], &buf)
+				setUint8(mqtt.Topics_qos[i], buf)
 			}
 		}
 	case UNSUBSCRIBE:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
-				setUint16(mqtt.MessageId, &buf)
+				setUint16(mqtt.MessageId, buf)
 			}
 			for i := 0; i < len(mqtt.Topics); i += 1 {
-				setString(mqtt.Topics[i], &buf)
+				setString(mqtt.Topics[i], buf)
 			}
 		}
 	}
 	if buf.Len() > 268435455 {
-		return nil, errors.New("Message is too long!")
+		return msgTooLongError
 	}
-	encodeLength(int32(buf.Len()), &headerbuf)
-	headerbuf.Write(buf.Bytes())
-	return headerbuf.Bytes(), nil
+
+	headerBuf := new(bytes.Buffer)
+	setHeader(&mqtt.Header, headerBuf)
+	encodeLength(int32(buf.Len()), headerBuf)
+
+	if _, err = w.Write(headerBuf.Bytes()); err != nil {
+		return
+	}
+	if _, err = w.Write(buf.Bytes()); err != nil {
+		return
+	}
+
+	return err
 }
 
 func valid(mqtt *Mqtt) error {
 	if !mqtt.Header.MessageType.IsValid() {
-		return errors.New("MessageType is invalid!")
+		return badMsgTypeError
 	}
 	if !mqtt.Header.QosLevel.IsValid() {
-		return errors.New("Qos Level is invalid!")
+		return badQosError
 	}
 	if !mqtt.ConnectFlags.WillQos.IsValid() {
-		return errors.New("Will Qos Level is invalid!")
+		return badWillQosError
 	}
 	return nil
 }
