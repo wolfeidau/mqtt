@@ -12,7 +12,7 @@ var bitCnt = uint32(0)
 
 func Test(t *testing.T) {
 	mqtt := Mqtt{
-		Header:          Header{MessageType: CONNECT},
+		Header:          Header{MessageType: MsgConnect},
 		ProtocolName:    "MQIsdp",
 		ProtocolVersion: 3,
 		ConnectFlags: ConnectFlags{

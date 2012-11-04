@@ -60,24 +60,24 @@ type Mqtt struct {
 type MessageType uint8
 
 func (mt MessageType) IsValid() bool {
-	return mt >= CONNECT && mt < msgTypeFirstInvalid
+	return mt >= MsgConnect && mt < msgTypeFirstInvalid
 }
 
 const (
-	CONNECT = MessageType(iota + 1)
-	CONNACK
-	PUBLISH
-	PUBACK
-	PUBREC
-	PUBREL
-	PUBCOMP
-	SUBSCRIBE
-	SUBACK
-	UNSUBSCRIBE
-	UNSUBACK
-	PINGREQ
-	PINGRESP
-	DISCONNECT
+	MsgConnect = MessageType(iota + 1)
+	MsgConnAck
+	MsgPublish
+	MsgPubAck
+	MsgPubRec
+	MsgPubRel
+	MsgPubComp
+	MsgSubscribe
+	MsgSubAck
+	MsgUnsubscribe
+	MsgUnsubAck
+	MsgPingReq
+	MsgPingResp
+	MsgDisconnect
 
 	msgTypeFirstInvalid
 )
@@ -192,7 +192,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 	}
 
 	switch mqtt.Header.MessageType {
-	case CONNECT:
+	case MsgConnect:
 		{
 			mqtt.ProtocolName = getString(r, &packetRemaining)
 			mqtt.ProtocolVersion = getUint8(r, &packetRemaining)
@@ -211,7 +211,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 				mqtt.Password = getString(r, &packetRemaining)
 			}
 		}
-	case CONNACK:
+	case MsgConnAck:
 		{
 			getUint8(r, &packetRemaining) // Skip reserved byte.
 			mqtt.ReturnCode = ReturnCode(getUint8(r, &packetRemaining))
@@ -219,7 +219,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 				return nil, badReturnCodeError
 			}
 		}
-	case PUBLISH:
+	case MsgPublish:
 		{
 			mqtt.TopicName = getString(r, &packetRemaining)
 			if mqtt.Header.QosLevel.HasId() {
@@ -230,11 +230,11 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 				return nil, err
 			}
 		}
-	case PUBACK, PUBREC, PUBREL, PUBCOMP, UNSUBACK:
+	case MsgPubAck, MsgPubRec, MsgPubRel, MsgPubComp, MsgUnsubAck:
 		{
 			mqtt.MessageId = getUint16(r, &packetRemaining)
 		}
-	case SUBSCRIBE:
+	case MsgSubscribe:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
 				mqtt.MessageId = getUint16(r, &packetRemaining)
@@ -248,7 +248,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 			mqtt.Topics = topics
 			mqtt.Topics_qos = topics_qos
 		}
-	case SUBACK:
+	case MsgSubAck:
 		{
 			mqtt.MessageId = getUint16(r, &packetRemaining)
 			topics_qos := make([]uint8, 0)
@@ -257,7 +257,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 			}
 			mqtt.Topics_qos = topics_qos
 		}
-	case UNSUBSCRIBE:
+	case MsgUnsubscribe:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
 				mqtt.MessageId = getUint16(r, &packetRemaining)
@@ -329,7 +329,7 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 
 	buf := new(bytes.Buffer)
 	switch mqtt.Header.MessageType {
-	case CONNECT:
+	case MsgConnect:
 		{
 			setString(mqtt.ProtocolName, buf)
 			setUint8(mqtt.ProtocolVersion, buf)
@@ -347,12 +347,12 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 				setString(mqtt.Password, buf)
 			}
 		}
-	case CONNACK:
+	case MsgConnAck:
 		{
 			buf.WriteByte(byte(0))
 			setUint8(uint8(mqtt.ReturnCode), buf)
 		}
-	case PUBLISH:
+	case MsgPublish:
 		{
 			setString(mqtt.TopicName, buf)
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
@@ -360,11 +360,11 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 			}
 			buf.Write(mqtt.Data)
 		}
-	case PUBACK, PUBREC, PUBREL, PUBCOMP, UNSUBACK:
+	case MsgPubAck, MsgPubRec, MsgPubRel, MsgPubComp, MsgUnsubAck:
 		{
 			setUint16(mqtt.MessageId, buf)
 		}
-	case SUBSCRIBE:
+	case MsgSubscribe:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
 				setUint16(mqtt.MessageId, buf)
@@ -374,14 +374,14 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 				setUint8(mqtt.Topics_qos[i], buf)
 			}
 		}
-	case SUBACK:
+	case MsgSubAck:
 		{
 			setUint16(mqtt.MessageId, buf)
 			for i := 0; i < len(mqtt.Topics_qos); i += 1 {
 				setUint8(mqtt.Topics_qos[i], buf)
 			}
 		}
-	case UNSUBSCRIBE:
+	case MsgUnsubscribe:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
 				setUint16(mqtt.MessageId, buf)
