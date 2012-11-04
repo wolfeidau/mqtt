@@ -20,25 +20,25 @@ func Test(t *testing.T) {
 }
 
 func initTest() *Mqtt {
-	mqtt := new(Mqtt)
-	mqtt.Header = new(Header)
-	mqtt.Header.MessageType = MessageType(1)
-	mqtt.ProtocolName = "MQIsdp"
-	mqtt.ProtocolVersion = uint8(3)
-	mqtt.ConnectFlags = new(ConnectFlags)
-	mqtt.ConnectFlags.UsernameFlag = true
-	mqtt.ConnectFlags.PasswordFlag = true
-	mqtt.ConnectFlags.WillRetain = false
-	mqtt.ConnectFlags.WillQos = uint8(1)
-	mqtt.ConnectFlags.WillFlag = true
-	mqtt.ConnectFlags.CleanSession = true
-	mqtt.KeepAliveTimer = uint16(10)
-	mqtt.ClientId = "xixihaha"
-	mqtt.WillTopic = "topic"
-	mqtt.WillMessage = "message"
-	mqtt.Username = "name"
-	mqtt.Password = "pwd"
-	return mqtt
+	return &Mqtt{
+		Header: &Header{MessageType: CONNECT},
+		ProtocolName: "MQIsdp",
+		ProtocolVersion: 3,
+		ConnectFlags: &ConnectFlags{
+			UsernameFlag: true,
+			PasswordFlag: true,
+			WillRetain: false,
+			WillQos: 1,
+			WillFlag: true,
+			CleanSession: true,
+		},
+		KeepAliveTimer: 10,
+		ClientId: "xixihaha",
+		WillTopic: "topic",
+		WillMessage: "message",
+		Username: "name",
+		Password: "pwd",
+	}
 }
 
 func printByte(b byte) {
