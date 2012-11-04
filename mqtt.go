@@ -40,24 +40,29 @@ type Header struct {
 	QosLevel        QosLevel
 }
 
-type ConnectFlags struct {
-	UsernameFlag, PasswordFlag, WillRetain, WillFlag, CleanSession bool
-	WillQos                                                        QosLevel
+type ConnectMsg struct {
+	ProtocolName               string
+	ProtocolVersion            uint8
+	WillRetain                 bool
+	WillFlag                   bool
+	CleanSession               bool
+	WillQos                    QosLevel
+	KeepAliveTimer             uint16
+	ClientId                   string
+	WillTopic, WillMessage     string
+	UsernameFlag, PasswordFlag bool
+	Username, Password         string
 }
 
 type Mqtt struct {
-	Header                    Header
-	ProtocolName, TopicName   string
-	ClientId                  string
-	WillTopic, WillMessage    string
-	Username, Password        string
-	ProtocolVersion           uint8
-	ConnectFlags              ConnectFlags
-	KeepAliveTimer, MessageId uint16
-	Data                      []byte
-	Topics                    []string
-	TopicsQos                 []uint8
-	ReturnCode                ReturnCode
+	Header     Header
+	ConnectMsg *ConnectMsg
+	MessageId  uint16
+	Data       []byte
+	TopicName  string
+	Topics     []string
+	TopicsQos  []uint8
+	ReturnCode ReturnCode
 }
 
 type MessageType uint8
@@ -163,16 +168,38 @@ func getHeader(r io.Reader) (Header, int32) {
 	}, decodeLength(r)
 }
 
-func getConnectFlags(r io.Reader, packetRemaining *int32) ConnectFlags {
-	bit := getUint8(r, packetRemaining)
-	return ConnectFlags{
-		UsernameFlag: bit&0x80 > 0,
-		PasswordFlag: bit&0x40 > 0,
-		WillRetain:   bit&0x20 > 0,
-		WillQos:      QosLevel(bit & 0x18 >> 3),
-		WillFlag:     bit&0x04 > 0,
-		CleanSession: bit&0x02 > 0,
+func getConnectMsg(r io.Reader, packetRemaining *int32) *ConnectMsg {
+	protocolName := getString(r, packetRemaining)
+	protocolVersion := getUint8(r, packetRemaining)
+	flags := getUint8(r, packetRemaining)
+	keepAliveTimer := getUint16(r, packetRemaining)
+	clientId := getString(r, packetRemaining)
+
+	msg := &ConnectMsg{
+		ProtocolName:    protocolName,
+		ProtocolVersion: protocolVersion,
+		UsernameFlag:    flags&0x80 > 0,
+		PasswordFlag:    flags&0x40 > 0,
+		WillRetain:      flags&0x20 > 0,
+		WillQos:         QosLevel(flags & 0x18 >> 3),
+		WillFlag:        flags&0x04 > 0,
+		CleanSession:    flags&0x02 > 0,
+		KeepAliveTimer:  keepAliveTimer,
+		ClientId:        clientId,
 	}
+
+	if msg.WillFlag {
+		msg.WillTopic = getString(r, packetRemaining)
+		msg.WillMessage = getString(r, packetRemaining)
+	}
+	if msg.UsernameFlag {
+		msg.Username = getString(r, packetRemaining)
+	}
+	if msg.PasswordFlag {
+		msg.Password = getString(r, packetRemaining)
+	}
+
+	return msg
 }
 
 func Decode(b []byte) (*Mqtt, error) {
@@ -196,24 +223,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 
 	switch mqtt.Header.MessageType {
 	case MsgConnect:
-		{
-			mqtt.ProtocolName = getString(r, &packetRemaining)
-			mqtt.ProtocolVersion = getUint8(r, &packetRemaining)
-			mqtt.ConnectFlags = getConnectFlags(r, &packetRemaining)
-			mqtt.KeepAliveTimer = getUint16(r, &packetRemaining)
-			mqtt.ClientId = getString(r, &packetRemaining)
-
-			if mqtt.ConnectFlags.WillFlag {
-				mqtt.WillTopic = getString(r, &packetRemaining)
-				mqtt.WillMessage = getString(r, &packetRemaining)
-			}
-			if mqtt.ConnectFlags.UsernameFlag {
-				mqtt.Username = getString(r, &packetRemaining)
-			}
-			if mqtt.ConnectFlags.PasswordFlag {
-				mqtt.Password = getString(r, &packetRemaining)
-			}
-		}
+		mqtt.ConnectMsg = getConnectMsg(r, &packetRemaining)
 	case MsgConnAck:
 		{
 			getUint8(r, &packetRemaining) // Skip reserved byte.
@@ -298,14 +308,29 @@ func setHeader(header *Header, buf *bytes.Buffer) {
 	buf.WriteByte(val)
 }
 
-func setConnectFlags(flags *ConnectFlags, buf *bytes.Buffer) {
-	val := boolToByte(flags.UsernameFlag) << 7
-	val |= boolToByte(flags.PasswordFlag) << 6
-	val |= boolToByte(flags.WillRetain) << 5
-	val |= byte(flags.WillQos) << 3
-	val |= boolToByte(flags.WillFlag) << 2
-	val |= boolToByte(flags.CleanSession) << 1
-	buf.WriteByte(val)
+func setConnectMsg(msg *ConnectMsg, buf *bytes.Buffer) {
+	flags := boolToByte(msg.UsernameFlag) << 7
+	flags |= boolToByte(msg.PasswordFlag) << 6
+	flags |= boolToByte(msg.WillRetain) << 5
+	flags |= byte(msg.WillQos) << 3
+	flags |= boolToByte(msg.WillFlag) << 2
+	flags |= boolToByte(msg.CleanSession) << 1
+
+	setString(msg.ProtocolName, buf)
+	setUint8(msg.ProtocolVersion, buf)
+	buf.WriteByte(flags)
+	setUint16(msg.KeepAliveTimer, buf)
+	setString(msg.ClientId, buf)
+	if msg.WillFlag {
+		setString(msg.WillTopic, buf)
+		setString(msg.WillMessage, buf)
+	}
+	if msg.UsernameFlag {
+		setString(msg.Username, buf)
+	}
+	if msg.PasswordFlag {
+		setString(msg.Password, buf)
+	}
 }
 
 func boolToByte(val bool) byte {
@@ -333,23 +358,7 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 	buf := new(bytes.Buffer)
 	switch mqtt.Header.MessageType {
 	case MsgConnect:
-		{
-			setString(mqtt.ProtocolName, buf)
-			setUint8(mqtt.ProtocolVersion, buf)
-			setConnectFlags(&mqtt.ConnectFlags, buf)
-			setUint16(mqtt.KeepAliveTimer, buf)
-			setString(mqtt.ClientId, buf)
-			if mqtt.ConnectFlags.WillFlag {
-				setString(mqtt.WillTopic, buf)
-				setString(mqtt.WillMessage, buf)
-			}
-			if mqtt.ConnectFlags.UsernameFlag {
-				setString(mqtt.Username, buf)
-			}
-			if mqtt.ConnectFlags.PasswordFlag {
-				setString(mqtt.Password, buf)
-			}
-		}
+		setConnectMsg(mqtt.ConnectMsg, buf)
 	case MsgConnAck:
 		{
 			buf.WriteByte(byte(0))
@@ -419,7 +428,7 @@ func valid(mqtt *Mqtt) error {
 	if !mqtt.Header.QosLevel.IsValid() {
 		return badQosError
 	}
-	if !mqtt.ConnectFlags.WillQos.IsValid() {
+	if !mqtt.ConnectMsg.WillQos.IsValid() {
 		return badWillQosError
 	}
 	return nil

@@ -12,23 +12,23 @@ var bitCnt = uint32(0)
 
 func Test(t *testing.T) {
 	mqtt := Mqtt{
-		Header:          Header{MessageType: MsgConnect},
-		ProtocolName:    "MQIsdp",
-		ProtocolVersion: 3,
-		ConnectFlags: ConnectFlags{
-			UsernameFlag: true,
-			PasswordFlag: true,
-			WillRetain:   false,
-			WillQos:      1,
-			WillFlag:     true,
-			CleanSession: true,
+		Header: Header{MessageType: MsgConnect},
+		ConnectMsg: &ConnectMsg{
+			ProtocolName:    "MQIsdp",
+			ProtocolVersion: 3,
+			UsernameFlag:    true,
+			PasswordFlag:    true,
+			WillRetain:      false,
+			WillQos:         1,
+			WillFlag:        true,
+			CleanSession:    true,
+			KeepAliveTimer:  10,
+			ClientId:        "xixihaha",
+			WillTopic:       "topic",
+			WillMessage:     "message",
+			Username:        "name",
+			Password:        "pwd",
 		},
-		KeepAliveTimer: 10,
-		ClientId:       "xixihaha",
-		WillTopic:      "topic",
-		WillMessage:    "message",
-		Username:       "name",
-		Password:       "pwd",
 	}
 
 	expected := gbt.InOrder{
