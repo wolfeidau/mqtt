@@ -75,9 +75,9 @@ func getHeader(b []byte, p *int) (Header, uint32) {
 	*p += 1
 	return Header{
 		MessageType: MessageType(byte1 & 0xF0 >> 4),
-		DupFlag: byte1&0x08 > 0,
-		QosLevel: uint8(byte1 & 0x06 >> 1),
-		Retain: byte1&0x01 > 0,
+		DupFlag:     byte1&0x08 > 0,
+		QosLevel:    uint8(byte1 & 0x06 >> 1),
+		Retain:      byte1&0x01 > 0,
 	}, decodeLength(b, p)
 }
 
@@ -87,9 +87,9 @@ func getConnectFlags(b []byte, p *int) ConnectFlags {
 	return ConnectFlags{
 		UsernameFlag: bit&0x80 > 0,
 		PasswordFlag: bit&0x40 > 0,
-		WillRetain: bit&0x20 > 0,
-		WillQos: uint8(bit & 0x18 >> 3),
-		WillFlag: bit&0x04 > 0,
+		WillRetain:   bit&0x20 > 0,
+		WillQos:      uint8(bit & 0x18 >> 3),
+		WillFlag:     bit&0x04 > 0,
 		CleanSession: bit&0x02 > 0,
 	}
 }
