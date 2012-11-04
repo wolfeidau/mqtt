@@ -3,19 +3,45 @@ package mqtt
 import (
 	"bytes"
 	"errors"
+	"io"
 )
 
-type MessageType uint8
-type ReturnCode uint8
+var (
+	badMsgTypeError        = errors.New("mqtt: message Type is invalid!")
+	badLengthEncodingError = errors.New("mqtt: remaining length field exceeded maximum of 4 bytes")
+	badReturnCodeError     = errors.New("mqtt: is invalid!")
+	dataExceedsPacketError = errors.New("mqtt: data exceeds packet length")
+)
+
+const (
+	QosAtMostOnce = QosLevel(iota)
+	QosAtLeastOnce
+	QosExactlyOnce
+
+	qosFirstInvalid
+)
+
+type QosLevel uint8
+
+func (qos QosLevel) IsValid() bool {
+	return qos < qosFirstInvalid
+}
+
+func (qos QosLevel) HasId() bool {
+	return qos == QosAtLeastOnce || qos == QosExactlyOnce
+}
+
 type Header struct {
 	MessageType     MessageType
 	DupFlag, Retain bool
-	QosLevel        uint8
+	QosLevel        QosLevel
 }
+
 type ConnectFlags struct {
 	UsernameFlag, PasswordFlag, WillRetain, WillFlag, CleanSession bool
-	WillQos                                                        uint8
+	WillQos                                                        QosLevel
 }
+
 type Mqtt struct {
 	Header                                                                        Header
 	ProtocolName, TopicName, ClientId, WillTopic, WillMessage, Username, Password string
@@ -26,6 +52,12 @@ type Mqtt struct {
 	Topics                                                                        []string
 	Topics_qos                                                                    []uint8
 	ReturnCode                                                                    ReturnCode
+}
+
+type MessageType uint8
+
+func (mt MessageType) IsValid() bool {
+	return mt >= CONNECT && mt < msgTypeFirstInvalid
 }
 
 const (
@@ -43,6 +75,8 @@ const (
 	PINGREQ
 	PINGRESP
 	DISCONNECT
+
+	msgTypeFirstInvalid
 )
 
 const (
@@ -52,130 +86,182 @@ const (
 	SERVER_UNAVAILABLE
 	BAD_USERNAME_OR_PASSWORD
 	NOT_AUTHORIZED
+
+	retCodeFirstInvalid
 )
 
-func getUint8(b []byte, p *int) uint8 {
-	*p += 1
-	return uint8(b[*p-1])
+type ReturnCode uint8
+
+func (rc ReturnCode) IsValid() bool {
+	return rc >= ACCEPTED && rc < retCodeFirstInvalid
 }
 
-func getUint16(b []byte, p *int) uint16 {
-	*p += 2
-	return uint16(b[*p-2]<<8) + uint16(b[*p-1])
+func getUint8(r io.Reader, packetRemaining *int32) uint8 {
+	if *packetRemaining < 1 {
+		raiseError(dataExceedsPacketError)
+	}
+
+	var b [1]byte
+	if _, err := io.ReadFull(r, b[:]); err != nil {
+		raiseError(err)
+	}
+	*packetRemaining--
+
+	return b[0]
 }
 
-func getString(b []byte, p *int) string {
-	length := int(getUint16(b, p))
-	*p += length
-	return string(b[*p-length : *p])
+func getUint16(r io.Reader, packetRemaining *int32) uint16 {
+	if *packetRemaining < 2 {
+		raiseError(dataExceedsPacketError)
+	}
+
+	var b [2]byte
+	if _, err := io.ReadFull(r, b[:]); err != nil {
+		raiseError(err)
+	}
+	*packetRemaining -= 2
+
+	return uint16(b[0]<<8) + uint16(b[1])
 }
 
-func getHeader(b []byte, p *int) (Header, uint32) {
-	byte1 := b[*p]
-	*p += 1
+func getString(r io.Reader, packetRemaining *int32) string {
+	strLen := int(getUint16(r, packetRemaining))
+
+	if int(*packetRemaining) < strLen {
+		raiseError(dataExceedsPacketError)
+	}
+
+	b := make([]byte, strLen)
+	if _, err := io.ReadFull(r, b); err != nil {
+		raiseError(err)
+	}
+	*packetRemaining -= int32(strLen)
+
+	return string(b)
+}
+
+func getHeader(r io.Reader) (Header, int32) {
+	var buf [1]byte
+
+	if _, err := io.ReadFull(r, buf[:]); err != nil {
+		raiseError(err)
+	}
+
+	byte1 := buf[0]
+
 	return Header{
 		MessageType: MessageType(byte1 & 0xF0 >> 4),
 		DupFlag:     byte1&0x08 > 0,
-		QosLevel:    uint8(byte1 & 0x06 >> 1),
+		QosLevel:    QosLevel(byte1 & 0x06 >> 1),
 		Retain:      byte1&0x01 > 0,
-	}, decodeLength(b, p)
+	}, decodeLength(r)
 }
 
-func getConnectFlags(b []byte, p *int) ConnectFlags {
-	bit := b[*p]
-	*p += 1
+func getConnectFlags(r io.Reader, packetRemaining *int32) ConnectFlags {
+	bit := getUint8(r, packetRemaining)
 	return ConnectFlags{
 		UsernameFlag: bit&0x80 > 0,
 		PasswordFlag: bit&0x40 > 0,
 		WillRetain:   bit&0x20 > 0,
-		WillQos:      uint8(bit & 0x18 >> 3),
+		WillQos:      QosLevel(bit & 0x18 >> 3),
 		WillFlag:     bit&0x04 > 0,
 		CleanSession: bit&0x02 > 0,
 	}
 }
 
 func Decode(b []byte) (*Mqtt, error) {
-	mqtt := new(Mqtt)
-	inx := 0
-	var length uint32
-	mqtt.Header, length = getHeader(b, &inx)
-	if length != uint32(len(b)-inx) {
-		return nil, errors.New("Message length is wrong!")
+	return DecodeRead(bytes.NewBuffer(b))
+}
+
+func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
+	defer func() {
+		err = recoverError(err)
+	}()
+
+	mqtt = new(Mqtt)
+
+	var packetRemaining int32
+	mqtt.Header, packetRemaining = getHeader(r)
+
+	if !mqtt.Header.MessageType.IsValid() {
+		err = badMsgTypeError
+		return
 	}
-	if msgType := uint8(mqtt.Header.MessageType); msgType < 1 || msgType > 14 {
-		return nil, errors.New("Message Type is invalid!")
-	}
+
 	switch mqtt.Header.MessageType {
 	case CONNECT:
 		{
-			mqtt.ProtocolName = getString(b, &inx)
-			mqtt.ProtocolVersion = getUint8(b, &inx)
-			mqtt.ConnectFlags = getConnectFlags(b, &inx)
-			mqtt.KeepAliveTimer = getUint16(b, &inx)
-			mqtt.ClientId = getString(b, &inx)
+			mqtt.ProtocolName = getString(r, &packetRemaining)
+			mqtt.ProtocolVersion = getUint8(r, &packetRemaining)
+			mqtt.ConnectFlags = getConnectFlags(r, &packetRemaining)
+			mqtt.KeepAliveTimer = getUint16(r, &packetRemaining)
+			mqtt.ClientId = getString(r, &packetRemaining)
+
 			if mqtt.ConnectFlags.WillFlag {
-				mqtt.WillTopic = getString(b, &inx)
-				mqtt.WillMessage = getString(b, &inx)
+				mqtt.WillTopic = getString(r, &packetRemaining)
+				mqtt.WillMessage = getString(r, &packetRemaining)
 			}
-			if mqtt.ConnectFlags.UsernameFlag && inx < len(b) {
-				mqtt.Username = getString(b, &inx)
+			if mqtt.ConnectFlags.UsernameFlag {
+				mqtt.Username = getString(r, &packetRemaining)
 			}
-			if mqtt.ConnectFlags.PasswordFlag && inx < len(b) {
-				mqtt.Password = getString(b, &inx)
+			if mqtt.ConnectFlags.PasswordFlag {
+				mqtt.Password = getString(r, &packetRemaining)
 			}
 		}
 	case CONNACK:
 		{
-			inx += 1
-			mqtt.ReturnCode = ReturnCode(getUint8(b, &inx))
-			if code := uint8(mqtt.ReturnCode); code > 5 {
-				return nil, errors.New("ReturnCode is invalid!")
+			getUint8(r, &packetRemaining) // Skip reserved byte.
+			mqtt.ReturnCode = ReturnCode(getUint8(r, &packetRemaining))
+			if !mqtt.ReturnCode.IsValid() {
+				return nil, badReturnCodeError
 			}
 		}
 	case PUBLISH:
 		{
-			mqtt.TopicName = getString(b, &inx)
-			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
-				mqtt.MessageId = getUint16(b, &inx)
+			mqtt.TopicName = getString(r, &packetRemaining)
+			if mqtt.Header.QosLevel.HasId() {
+				mqtt.MessageId = getUint16(r, &packetRemaining)
 			}
-			mqtt.Data = b[inx:len(b)]
-			inx = len(b)
+			mqtt.Data = make([]byte, packetRemaining)
+			if _, err = io.ReadFull(r, mqtt.Data); err != nil {
+				return nil, err
+			}
 		}
 	case PUBACK, PUBREC, PUBREL, PUBCOMP, UNSUBACK:
 		{
-			mqtt.MessageId = getUint16(b, &inx)
+			mqtt.MessageId = getUint16(r, &packetRemaining)
 		}
 	case SUBSCRIBE:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
-				mqtt.MessageId = getUint16(b, &inx)
+				mqtt.MessageId = getUint16(r, &packetRemaining)
 			}
 			topics := make([]string, 0)
 			topics_qos := make([]uint8, 0)
-			for inx < len(b) {
-				topics = append(topics, getString(b, &inx))
-				topics_qos = append(topics_qos, getUint8(b, &inx))
+			for packetRemaining > 0 {
+				topics = append(topics, getString(r, &packetRemaining))
+				topics_qos = append(topics_qos, getUint8(r, &packetRemaining))
 			}
 			mqtt.Topics = topics
 			mqtt.Topics_qos = topics_qos
 		}
 	case SUBACK:
 		{
-			mqtt.MessageId = getUint16(b, &inx)
+			mqtt.MessageId = getUint16(r, &packetRemaining)
 			topics_qos := make([]uint8, 0)
-			for inx < len(b) {
-				topics_qos = append(topics_qos, getUint8(b, &inx))
+			for packetRemaining > 0 {
+				topics_qos = append(topics_qos, getUint8(r, &packetRemaining))
 			}
 			mqtt.Topics_qos = topics_qos
 		}
 	case UNSUBSCRIBE:
 		{
 			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
-				mqtt.MessageId = getUint16(b, &inx)
+				mqtt.MessageId = getUint16(r, &packetRemaining)
 			}
 			topics := make([]string, 0)
-			for inx < len(b) {
-				topics = append(topics, getString(b, &inx))
+			for packetRemaining > 0 {
+				topics = append(topics, getString(r, &packetRemaining))
 			}
 			mqtt.Topics = topics
 		}
@@ -296,37 +382,47 @@ func Encode(mqtt *Mqtt) ([]byte, error) {
 	if buf.Len() > 268435455 {
 		return nil, errors.New("Message is too long!")
 	}
-	encodeLength(uint32(buf.Len()), &headerbuf)
+	encodeLength(int32(buf.Len()), &headerbuf)
 	headerbuf.Write(buf.Bytes())
 	return headerbuf.Bytes(), nil
 }
 
 func valid(mqtt *Mqtt) error {
-	if msgType := uint8(mqtt.Header.MessageType); msgType < 1 || msgType > 14 {
+	if !mqtt.Header.MessageType.IsValid() {
 		return errors.New("MessageType is invalid!")
 	}
-	if mqtt.Header.QosLevel > 3 {
+	if !mqtt.Header.QosLevel.IsValid() {
 		return errors.New("Qos Level is invalid!")
 	}
-	if mqtt.ConnectFlags.WillQos > 3 {
+	if !mqtt.ConnectFlags.WillQos.IsValid() {
 		return errors.New("Will Qos Level is invalid!")
 	}
 	return nil
 }
 
-func decodeLength(b []byte, p *int) uint32 {
-	m := uint32(1)
-	v := uint32(b[*p] & 0x7f)
-	*p += 1
-	for b[*p-1]&0x80 > 0 {
-		m *= 128
-		v += uint32(b[*p]&0x7f) * m
-		*p += 1
+func decodeLength(r io.Reader) int32 {
+	var v int32
+	var buf [1]byte
+	var shift uint
+	for i := 0; i < 4; i++ {
+		if _, err := io.ReadFull(r, buf[:]); err != nil {
+			raiseError(err)
+		}
+
+		b := buf[0]
+		v |= int32(b&0x7f) << shift
+
+		if b&0x80 == 0 {
+			return v
+		}
+		shift += 7
 	}
-	return v
+
+	raiseError(badLengthEncodingError)
+	panic("unreachable")
 }
 
-func encodeLength(length uint32, buf *bytes.Buffer) {
+func encodeLength(length int32, buf *bytes.Buffer) {
 	if length == 0 {
 		buf.WriteByte(byte(0))
 		return
@@ -344,4 +440,36 @@ func encodeLength(length uint32, buf *bytes.Buffer) {
 	for i := 1; i <= len(blen); i += 1 {
 		buf.WriteByte(blen[len(blen)-i])
 	}
+}
+
+// panicErr wraps an error that caused a problem that needs to bail out of the
+// API, such that errors can be recovered and returned as errors from the
+// public API.
+type panicErr struct {
+	err error
+}
+
+func (p panicErr) Error() string {
+	return p.err.Error()
+}
+
+func raiseError(err error) {
+	panic(panicErr{err})
+}
+
+// recoverError recovers any panic in flight and, iff it's an error from
+// raiseError, will return the error. Otherwise re-raises the panic value.
+// If no panic is in flight, it returns existingErr.
+//
+// This must be used in combination with a defer in all public API entry
+// points where raiseError could be called.
+func recoverError(existingErr error) error {
+	if p := recover(); p != nil {
+		if pErr, ok := p.(panicErr); ok {
+			return pErr.err
+		} else {
+			panic(p)
+		}
+	}
+	return existingErr
 }
