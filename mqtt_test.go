@@ -1,30 +1,21 @@
 package mqtt
 
 import (
-	"fmt"
+	"bytes"
+	"reflect"
 	"testing"
+
+	gbt "github.com/huin/gobinarytest"
 )
 
 var bitCnt = uint32(0)
 
 func Test(t *testing.T) {
-	mqtt := initTest()
-	fmt.Println("------ Origin MQTT Object")
-	printMqtt(mqtt)
-	fmt.Println("------ Encode To Binary")
-	bits, _ := Encode(mqtt)
-	printBytes(bits)
-	fmt.Println("------ Decode To Object")
-	newMqtt, _ := Decode(bits)
-	printMqtt(newMqtt)
-}
-
-func initTest() *Mqtt {
-	return &Mqtt{
-		Header: &Header{MessageType: CONNECT},
+	mqtt := Mqtt{
+		Header: Header{MessageType: CONNECT},
 		ProtocolName: "MQIsdp",
 		ProtocolVersion: 3,
-		ConnectFlags: &ConnectFlags{
+		ConnectFlags: ConnectFlags{
 			UsernameFlag: true,
 			PasswordFlag: true,
 			WillRetain: false,
@@ -39,30 +30,42 @@ func initTest() *Mqtt {
 		Username: "name",
 		Password: "pwd",
 	}
-}
 
-func printByte(b byte) {
-	bitCnt += 1
-	out := make([]uint8, 8)
-	val := uint8(b)
-	for i := 1; val > 0; i += 1 {
-		foo := val % 2
-		val = (val - foo) / 2
-		out[8-i] = foo
+	expected := gbt.InOrder{
+		gbt.Named{"Header byte", gbt.Literal{0x10}},
+		gbt.Named{"Remaining length", gbt.Literal{12 + 5*2 + 8 + 5 + 7 + 4 + 3}},
+
+		// Extended headers for CONNECT:
+		gbt.Named{"Protocol name", gbt.InOrder{gbt.Literal{0x00, 0x06}, gbt.Literal("MQIsdp")}},
+		gbt.Named{
+			"Extended headers for CONNECT",
+			gbt.Literal{
+				0x03, // Protocol version number
+				0xce, // Connect flags
+				0x00, 0x0a, // Keep alive timer
+			},
+		},
+
+		// CONNECT payload:
+		gbt.Named{"Client identifier", gbt.InOrder{gbt.Literal{0x00, 0x08}, gbt.Literal("xixihaha")}},
+		gbt.Named{"Will topic", gbt.InOrder{gbt.Literal{0x00, 0x05}, gbt.Literal("topic")}},
+		gbt.Named{"Will message", gbt.InOrder{gbt.Literal{0x00, 0x07}, gbt.Literal("message")}},
+		gbt.Named{"Username", gbt.InOrder{gbt.Literal{0x00, 0x04}, gbt.Literal("name")}},
+		gbt.Named{"Password", gbt.InOrder{gbt.Literal{0x00, 0x03}, gbt.Literal("pwd")}},
 	}
-	fmt.Println(bitCnt, out)
-}
 
-func printBytes(b []byte) {
-	for i := 0; i < len(b); i += 1 {
-		printByte(b[i])
+	if encoded, err := Encode(&mqtt); err != nil {
+		t.Errorf("Unexpected error during encoding: %v", err)
+	} else if err = gbt.Matches(expected, encoded); err != nil {
+		t.Errorf("Unexpected encoding output: %v", err)
 	}
-}
 
-func printMqtt(mqtt *Mqtt) {
-	fmt.Printf("MQTT = %+v\n", *mqtt)
-	fmt.Printf("Header = %+v\n", *mqtt.Header)
-	if mqtt.ConnectFlags != nil {
-		fmt.Printf("ConnectFlags = %+v\n", *mqtt.ConnectFlags)
+	encodedBuf := new(bytes.Buffer)
+	expected.Write(encodedBuf)
+
+	if decodedMqtt, err := Decode(encodedBuf.Bytes()); err != nil {
+		t.Errorf("Unexpected error during decoding: %v", err)
+	} else if !reflect.DeepEqual(&mqtt, decodedMqtt) {
+		t.Errorf("Decoded value mismatch\n     got = %#v\nexpected = %#v", *decodedMqtt, mqtt)
 	}
 }

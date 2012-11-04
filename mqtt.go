@@ -11,17 +11,16 @@ type Header struct {
 	MessageType     MessageType
 	DupFlag, Retain bool
 	QosLevel        uint8
-	Length          uint32
 }
 type ConnectFlags struct {
 	UsernameFlag, PasswordFlag, WillRetain, WillFlag, CleanSession bool
 	WillQos                                                        uint8
 }
 type Mqtt struct {
-	Header                                                                        *Header
+	Header                                                                        Header
 	ProtocolName, TopicName, ClientId, WillTopic, WillMessage, Username, Password string
 	ProtocolVersion                                                               uint8
-	ConnectFlags                                                                  *ConnectFlags
+	ConnectFlags                                                                  ConnectFlags
 	KeepAliveTimer, MessageId                                                     uint16
 	Data                                                                          []byte
 	Topics                                                                        []string
@@ -71,36 +70,36 @@ func getString(b []byte, p *int) string {
 	return string(b[*p-length : *p])
 }
 
-func getHeader(b []byte, p *int) *Header {
+func getHeader(b []byte, p *int) (Header, uint32) {
 	byte1 := b[*p]
 	*p += 1
-	header := new(Header)
-	header.MessageType = MessageType(byte1 & 0xF0 >> 4)
-	header.DupFlag = byte1&0x08 > 0
-	header.QosLevel = uint8(byte1 & 0x06 >> 1)
-	header.Retain = byte1&0x01 > 0
-	header.Length = decodeLength(b, p)
-	return header
+	return Header{
+		MessageType: MessageType(byte1 & 0xF0 >> 4),
+		DupFlag: byte1&0x08 > 0,
+		QosLevel: uint8(byte1 & 0x06 >> 1),
+		Retain: byte1&0x01 > 0,
+	}, decodeLength(b, p)
 }
 
-func getConnectFlags(b []byte, p *int) *ConnectFlags {
+func getConnectFlags(b []byte, p *int) ConnectFlags {
 	bit := b[*p]
 	*p += 1
-	flags := new(ConnectFlags)
-	flags.UsernameFlag = bit&0x80 > 0
-	flags.PasswordFlag = bit&0x40 > 0
-	flags.WillRetain = bit&0x20 > 0
-	flags.WillQos = uint8(bit & 0x18 >> 3)
-	flags.WillFlag = bit&0x04 > 0
-	flags.CleanSession = bit&0x02 > 0
-	return flags
+	return ConnectFlags{
+		UsernameFlag: bit&0x80 > 0,
+		PasswordFlag: bit&0x40 > 0,
+		WillRetain: bit&0x20 > 0,
+		WillQos: uint8(bit & 0x18 >> 3),
+		WillFlag: bit&0x04 > 0,
+		CleanSession: bit&0x02 > 0,
+	}
 }
 
 func Decode(b []byte) (*Mqtt, error) {
 	mqtt := new(Mqtt)
 	inx := 0
-	mqtt.Header = getHeader(b, &inx)
-	if mqtt.Header.Length != uint32(len(b)-inx) {
+	var length uint32
+	mqtt.Header, length = getHeader(b, &inx)
+	if length != uint32(len(b)-inx) {
 		return nil, errors.New("Message length is wrong!")
 	}
 	if msgType := uint8(mqtt.Header.MessageType); msgType < 1 || msgType > 14 {
@@ -230,13 +229,13 @@ func Encode(mqtt *Mqtt) ([]byte, error) {
 		return nil, err
 	}
 	var headerbuf, buf bytes.Buffer
-	setHeader(mqtt.Header, &headerbuf)
+	setHeader(&mqtt.Header, &headerbuf)
 	switch mqtt.Header.MessageType {
 	case CONNECT:
 		{
 			setString(mqtt.ProtocolName, &buf)
 			setUint8(mqtt.ProtocolVersion, &buf)
-			setConnectFlags(mqtt.ConnectFlags, &buf)
+			setConnectFlags(&mqtt.ConnectFlags, &buf)
 			setUint16(mqtt.KeepAliveTimer, &buf)
 			setString(mqtt.ClientId, &buf)
 			if mqtt.ConnectFlags.WillFlag {
@@ -309,7 +308,7 @@ func valid(mqtt *Mqtt) error {
 	if mqtt.Header.QosLevel > 3 {
 		return errors.New("Qos Level is invalid!")
 	}
-	if mqtt.ConnectFlags != nil && mqtt.ConnectFlags.WillQos > 3 {
+	if mqtt.ConnectFlags.WillQos > 3 {
 		return errors.New("Will Qos Level is invalid!")
 	}
 	return nil
