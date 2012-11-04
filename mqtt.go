@@ -236,7 +236,7 @@ func DecodeRead(r io.Reader) (mqtt *Mqtt, err error) {
 		}
 	case MsgSubscribe:
 		{
-			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
+			if mqtt.Header.QosLevel.HasId() {
 				mqtt.MessageId = getUint16(r, &packetRemaining)
 			}
 			topics := make([]string, 0)
@@ -355,7 +355,7 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 	case MsgPublish:
 		{
 			setString(mqtt.TopicName, buf)
-			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
+			if mqtt.Header.QosLevel.HasId() {
 				setUint16(mqtt.MessageId, buf)
 			}
 			buf.Write(mqtt.Data)
@@ -366,7 +366,7 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 		}
 	case MsgSubscribe:
 		{
-			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
+			if mqtt.Header.QosLevel.HasId() {
 				setUint16(mqtt.MessageId, buf)
 			}
 			for i := 0; i < len(mqtt.Topics); i += 1 {
@@ -383,7 +383,7 @@ func EncodeWrite(w io.Writer, mqtt *Mqtt) (err error) {
 		}
 	case MsgUnsubscribe:
 		{
-			if qos := mqtt.Header.QosLevel; qos == 1 || qos == 2 {
+			if mqtt.Header.QosLevel.HasId() {
 				setUint16(mqtt.MessageId, buf)
 			}
 			for i := 0; i < len(mqtt.Topics); i += 1 {
