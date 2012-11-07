@@ -12,8 +12,8 @@ Currently the library's API is unstable.
 ### Decoding Messages
 
 Use the `DecodeOneMessage` function to read a Message from an `io.Reader`, it
-will return a Message value. The function can be implemented if more control is
-required.
+will return a Message value. The function can be implemented using the public
+API of this library if more control is required.
 
 ### Encoding Messages
 
