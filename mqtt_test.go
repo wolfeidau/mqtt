@@ -11,24 +11,21 @@ import (
 var bitCnt = uint32(0)
 
 func Test(t *testing.T) {
-	mqtt := Mqtt{
-		Header: Header{MessageType: MsgConnect},
-		ConnectMsg: &ConnectMsg{
-			ProtocolName:    "MQIsdp",
-			ProtocolVersion: 3,
-			UsernameFlag:    true,
-			PasswordFlag:    true,
-			WillRetain:      false,
-			WillQos:         1,
-			WillFlag:        true,
-			CleanSession:    true,
-			KeepAliveTimer:  10,
-			ClientId:        "xixihaha",
-			WillTopic:       "topic",
-			WillMessage:     "message",
-			Username:        "name",
-			Password:        "pwd",
-		},
+	msg := Connect{
+		ProtocolName:    "MQIsdp",
+		ProtocolVersion: 3,
+		UsernameFlag:    true,
+		PasswordFlag:    true,
+		WillRetain:      false,
+		WillQos:         1,
+		WillFlag:        true,
+		CleanSession:    true,
+		KeepAliveTimer:  10,
+		ClientId:        "xixihaha",
+		WillTopic:       "topic",
+		WillMessage:     "message",
+		Username:        "name",
+		Password:        "pwd",
 	}
 
 	expected := gbt.InOrder{
@@ -54,19 +51,20 @@ func Test(t *testing.T) {
 		gbt.Named{"Password", gbt.InOrder{gbt.Literal{0x00, 0x03}, gbt.Literal("pwd")}},
 	}
 
-	if encoded, err := Encode(&mqtt); err != nil {
+	encodedBuf := new(bytes.Buffer)
+	if err := msg.Encode(encodedBuf); err != nil {
 		t.Errorf("Unexpected error during encoding: %v", err)
-	} else if err = gbt.Matches(expected, encoded); err != nil {
+	} else if err = gbt.Matches(expected, encodedBuf.Bytes()); err != nil {
 		t.Errorf("Unexpected encoding output: %v", err)
 	}
 
-	encodedBuf := new(bytes.Buffer)
-	expected.Write(encodedBuf)
+	expectedBuf := new(bytes.Buffer)
+	expected.Write(expectedBuf)
 
-	if decodedMqtt, err := DecodeRead(encodedBuf); err != nil {
+	if decodedMsg, err := DecodeRead(expectedBuf); err != nil {
 		t.Errorf("Unexpected error during decoding: %v", err)
-	} else if !reflect.DeepEqual(&mqtt, decodedMqtt) {
-		t.Errorf("Decoded value mismatch\n     got = %#v\nexpected = %#v", *decodedMqtt, mqtt)
+	} else if !reflect.DeepEqual(&msg, decodedMsg) {
+		t.Errorf("Decoded value mismatch\n     got = %#v\nexpected = %#v", msg, decodedMsg)
 	}
 }
 
