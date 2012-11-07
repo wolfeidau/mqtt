@@ -5,6 +5,8 @@ import (
 	"io"
 )
 
+// Header contains the common attributes of all messages. Some attributes are
+// not applicable to some message types.
 type Header struct {
 	DupFlag, Retain bool
 	QosLevel        QosLevel
@@ -54,11 +56,18 @@ func (hdr *Header) Decode(r io.Reader) (msgType MessageType, remainingLength int
 	return
 }
 
+// Message is the interface that all MQTT messages implement.
 type Message interface {
+	// Encode writes the message to w.
 	Encode(w io.Writer) error
+
+	// Decode reads the message extended headers and payload from
+	// r. Typically the values for hdr and packetRemaining will
+	// be returned from Header.Decode.
 	Decode(r io.Reader, hdr Header, packetRemaining int32) error
 }
 
+// MessageType constants.
 const (
 	MsgConnect = MessageType(iota + 1)
 	MsgConnAck
@@ -80,6 +89,7 @@ const (
 
 type MessageType uint8
 
+// IsValid returns true if the MessageType value is valid.
 func (mt MessageType) IsValid() bool {
 	return mt >= MsgConnect && mt < msgTypeFirstInvalid
 }
@@ -95,6 +105,7 @@ func writeMessage(w io.Writer, hdr *Header, payloadBuf *bytes.Buffer) error {
 	return err
 }
 
+// Connect represents an MQTT CONNECT message.
 type Connect struct {
 	Header
 	ProtocolName               string
@@ -181,6 +192,7 @@ func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 	return nil
 }
 
+// ConnAck represents an MQTT CONNACK message.
 type ConnAck struct {
 	Header
 	ReturnCode ReturnCode
@@ -209,6 +221,7 @@ func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 	return nil
 }
 
+// Publish represents an MQTT PUBLISH message.
 type Publish struct {
 	Header
 	TopicName string
@@ -244,22 +257,27 @@ func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 	return nil
 }
 
+// PubAck represents an MQTT PUBACK message.
 type PubAck struct {
 	AckCommon
 }
 
+// PubRec represents an MQTT PUBREC message.
 type PubRec struct {
 	AckCommon
 }
 
+// PubRel represents an MQTT PUBREL message.
 type PubRel struct {
 	AckCommon
 }
 
+// PubComp represents an MQTT PUBCOMP message.
 type PubComp struct {
 	AckCommon
 }
 
+// Subscribe represents an MQTT SUBSCRIBE message.
 type Subscribe struct {
 	Header
 	MessageId uint16
@@ -300,6 +318,7 @@ func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (er
 	return nil
 }
 
+// SubAck represents an MQTT SUBACK message.
 type SubAck struct {
 	Header
 	MessageId uint16
@@ -332,6 +351,7 @@ func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err e
 	return nil
 }
 
+// Unsubscribe represents an MQTT UNSUBSCRIBE message.
 type Unsubscribe struct {
 	Header
 	MessageId uint16
@@ -367,10 +387,12 @@ func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (
 	return nil
 }
 
+// UnsubAck represents an MQTT UNSUBACK message.
 type UnsubAck struct {
 	AckCommon
 }
 
+// AckCommon is not an actual message, but represents the common elements of many similar messages.
 type AckCommon struct {
 	Header
 	MessageId uint16
