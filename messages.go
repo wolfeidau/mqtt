@@ -413,7 +413,7 @@ func (msg *UnsubAck) Encode(w io.Writer) error {
 }
 
 // AckCommon is not an actual message, but represents the common elements of
-// many similar messages (not part of the API).
+// many similar messages.
 type AckCommon struct {
 	Header
 	MessageId uint16
