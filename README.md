@@ -1,23 +1,20 @@
-#mqtt
+# mqtt
 
 An MQTT encoder and decoder,written in Golang.
 
 This library was modified heavily from https://github.com/plucury/mqtt.go and
 is API-incompatible with it.
 
-##Functions
-* `func Encode(mqtt *Mqtt) (byte[], error)`
+Currently the library's API is unstable.
 
-	Convert Mqtt struct to bit stream.
+## Usage
 
-* `func EncodeWrite(w io.Writer, mqtt *Mqtt) error`
+### Decoding Messages
 
-	Write Mqtt struct to `w`.
+Use the `DecodeOneMessage` function to read a Message from an `io.Reader`, it
+will return a Message value. The function can be implemented if more control is
+required.
 
-* `func Decode(bitstream byte[]) (*Mqtt, error)`
+### Encoding Messages
 
-	Convert bit stream to Mqtt struct.
-
-* `func DecodeRead(r io.Reader) (*Mqtt, error)`
-
-	Read Mqtt struct from `r`.
+Use the `Encode` method on a Message value to write to an `io.Writer`.

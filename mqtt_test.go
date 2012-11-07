@@ -61,7 +61,7 @@ func Test(t *testing.T) {
 	expectedBuf := new(bytes.Buffer)
 	expected.Write(expectedBuf)
 
-	if decodedMsg, err := DecodeRead(expectedBuf); err != nil {
+	if decodedMsg, err := DecodeOneMessage(expectedBuf); err != nil {
 		t.Errorf("Unexpected error during decoding: %v", err)
 	} else if !reflect.DeepEqual(&msg, decodedMsg) {
 		t.Errorf("Decoded value mismatch\n     got = %#v\nexpected = %#v", msg, decodedMsg)

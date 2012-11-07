@@ -95,16 +95,18 @@ func getString(r io.Reader, packetRemaining *int32) string {
 	return string(b)
 }
 
-func DecodeRead(r io.Reader) (msg Message, err error) {
-	defer func() {
-		err = recoverError(err)
-	}()
-
+func DecodeOneMessage(r io.Reader) (msg Message, err error) {
 	var hdr Header
 	var msgType MessageType
 	var packetRemaining int32
 	msgType, packetRemaining, err = hdr.Decode(r)
 
+	msg, err = NewMessage(msgType)
+
+	return msg, msg.Decode(r, hdr, packetRemaining)
+}
+
+func NewMessage(msgType MessageType) (msg Message, err error) {
 	switch msgType {
 	case MsgConnect:
 		msg = new(Connect)
@@ -132,7 +134,7 @@ func DecodeRead(r io.Reader) (msg Message, err error) {
 		return nil, badMsgTypeError
 	}
 
-	return msg, msg.Decode(r, hdr, packetRemaining)
+	return
 }
 
 func setUint8(val uint8, buf *bytes.Buffer) {
