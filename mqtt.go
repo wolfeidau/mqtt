@@ -97,6 +97,7 @@ func getString(r io.Reader, packetRemaining *int32) string {
 	return string(b)
 }
 
+// DecodeOneMessage decodes one message from r.
 func DecodeOneMessage(r io.Reader) (msg Message, err error) {
 	var hdr Header
 	var msgType MessageType
@@ -108,6 +109,8 @@ func DecodeOneMessage(r io.Reader) (msg Message, err error) {
 	return msg, msg.Decode(r, hdr, packetRemaining)
 }
 
+// NewMessage creates an instance of a Message value for the given message
+// type. An error is returned if msgType is invalid.
 func NewMessage(msgType MessageType) (msg Message, err error) {
 	switch msgType {
 	case MsgConnect:
