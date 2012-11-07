@@ -94,8 +94,8 @@ func (mt MessageType) IsValid() bool {
 	return mt >= MsgConnect && mt < msgTypeFirstInvalid
 }
 
-func writeMessage(w io.Writer, hdr *Header, payloadBuf *bytes.Buffer) error {
-	err := hdr.Encode(w, MsgConnect, int32(len(payloadBuf.Bytes())))
+func writeMessage(w io.Writer, msgType MessageType, hdr *Header, payloadBuf *bytes.Buffer) error {
+	err := hdr.Encode(w, msgType, int32(len(payloadBuf.Bytes())))
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (msg *Connect) Encode(w io.Writer) (err error) {
 		setString(msg.Password, buf)
 	}
 
-	return writeMessage(w, &msg.Header, buf)
+	return writeMessage(w, MsgConnect, &msg.Header, buf)
 }
 
 func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -204,7 +204,7 @@ func (msg *ConnAck) Encode(w io.Writer) (err error) {
 	buf.WriteByte(byte(0))
 	setUint8(uint8(msg.ReturnCode), buf)
 
-	return writeMessage(w, &msg.Header, buf)
+	return writeMessage(w, MsgConnAck, &msg.Header, buf)
 }
 
 func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -238,7 +238,7 @@ func (msg *Publish) Encode(w io.Writer) (err error) {
 	}
 	buf.Write(msg.Data)
 
-	return writeMessage(w, &msg.Header, buf)
+	return writeMessage(w, MsgPublish, &msg.Header, buf)
 }
 
 func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -262,9 +262,17 @@ type PubAck struct {
 	AckCommon
 }
 
+func (msg *PubAck) Encode(w io.Writer) error {
+	return msg.AckCommon.encode(w, MsgPubAck)
+}
+
 // PubRec represents an MQTT PUBREC message.
 type PubRec struct {
 	AckCommon
+}
+
+func (msg *PubRec) Encode(w io.Writer) error {
+	return msg.AckCommon.encode(w, MsgPubRec)
 }
 
 // PubRel represents an MQTT PUBREL message.
@@ -272,9 +280,17 @@ type PubRel struct {
 	AckCommon
 }
 
+func (msg *PubRel) Encode(w io.Writer) error {
+	return msg.AckCommon.encode(w, MsgPubRel)
+}
+
 // PubComp represents an MQTT PUBCOMP message.
 type PubComp struct {
 	AckCommon
+}
+
+func (msg *PubComp) Encode(w io.Writer) error {
+	return msg.AckCommon.encode(w, MsgPubComp)
 }
 
 // Subscribe represents an MQTT SUBSCRIBE message.
@@ -295,7 +311,7 @@ func (msg *Subscribe) Encode(w io.Writer) (err error) {
 		setUint8(uint8(msg.TopicsQos[i]), buf)
 	}
 
-	return writeMessage(w, &msg.Header, buf)
+	return writeMessage(w, MsgSubscribe, &msg.Header, buf)
 }
 
 func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -332,7 +348,7 @@ func (msg *SubAck) Encode(w io.Writer) (err error) {
 		setUint8(uint8(msg.TopicsQos[i]), buf)
 	}
 
-	return writeMessage(w, &msg.Header, buf)
+	return writeMessage(w, MsgSubAck, &msg.Header, buf)
 }
 
 func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -367,7 +383,7 @@ func (msg *Unsubscribe) Encode(w io.Writer) (err error) {
 		setString(topic, buf)
 	}
 
-	return writeMessage(w, &msg.Header, buf)
+	return writeMessage(w, MsgUnsubscribe, &msg.Header, buf)
 }
 
 func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -392,17 +408,22 @@ type UnsubAck struct {
 	AckCommon
 }
 
-// AckCommon is not an actual message, but represents the common elements of many similar messages.
+func (msg *UnsubAck) Encode(w io.Writer) error {
+	return msg.AckCommon.encode(w, MsgUnsubAck)
+}
+
+// AckCommon is not an actual message, but represents the common elements of
+// many similar messages (not part of the API).
 type AckCommon struct {
 	Header
 	MessageId uint16
 }
 
-func (msg *AckCommon) Encode(w io.Writer) (err error) {
+func (msg *AckCommon) encode(w io.Writer, msgType MessageType) (err error) {
 	buf := new(bytes.Buffer)
 	setUint16(msg.MessageId, buf)
 
-	return writeMessage(w, &msg.Header, buf)
+	return writeMessage(w, msgType, &msg.Header, buf)
 }
 
 func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
