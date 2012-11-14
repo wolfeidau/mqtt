@@ -33,7 +33,7 @@ func (hdr *Header) Encode(w io.Writer, msgType MessageType, remainingLength int3
 
 func (hdr *Header) Decode(r io.Reader) (msgType MessageType, remainingLength int32, err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	var buf [1]byte
@@ -156,7 +156,7 @@ func (msg *Connect) Encode(w io.Writer) (err error) {
 
 func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	protocolName := getString(r, &packetRemaining)
@@ -201,7 +201,7 @@ type ConnAck struct {
 func (msg *ConnAck) Encode(w io.Writer) (err error) {
 	buf := new(bytes.Buffer)
 
-	buf.WriteByte(byte(0))
+	buf.WriteByte(byte(0)) // Reserved byte.
 	setUint8(uint8(msg.ReturnCode), buf)
 
 	return writeMessage(w, MsgConnAck, &msg.Header, buf)
@@ -209,7 +209,7 @@ func (msg *ConnAck) Encode(w io.Writer) (err error) {
 
 func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	getUint8(r, &packetRemaining) // Skip reserved byte.
@@ -243,7 +243,7 @@ func (msg *Publish) Encode(w io.Writer) (err error) {
 
 func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	msg.TopicName = getString(r, &packetRemaining)
@@ -320,7 +320,7 @@ func (msg *Subscribe) Encode(w io.Writer) (err error) {
 
 func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	if msg.Header.QosLevel.HasId() {
@@ -357,7 +357,7 @@ func (msg *SubAck) Encode(w io.Writer) (err error) {
 
 func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	msg.MessageId = getUint16(r, &packetRemaining)
@@ -392,7 +392,7 @@ func (msg *Unsubscribe) Encode(w io.Writer) (err error) {
 
 func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	if qos := msg.Header.QosLevel; qos == 1 || qos == 2 {
@@ -432,7 +432,7 @@ func (msg *AckCommon) encode(w io.Writer, msgType MessageType) (err error) {
 
 func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
 	defer func() {
-		err = recoverError(err)
+		err = recoverError(err, recover())
 	}()
 
 	msg.MessageId = getUint16(r, &packetRemaining)

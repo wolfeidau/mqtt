@@ -118,12 +118,12 @@ func raiseError(err error) {
 //
 // This must be used in combination with a defer in all public API entry
 // points where raiseError could be called.
-func recoverError(existingErr error) error {
-	if p := recover(); p != nil {
-		if pErr, ok := p.(panicErr); ok {
+func recoverError(existingErr error, recovered interface{}) error {
+	if recovered != nil {
+		if pErr, ok := recovered.(panicErr); ok {
 			return pErr.err
 		} else {
-			panic(p)
+			panic(recovered)
 		}
 	}
 	return existingErr
