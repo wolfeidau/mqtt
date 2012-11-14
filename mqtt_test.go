@@ -11,60 +11,69 @@ import (
 var bitCnt = uint32(0)
 
 func Test(t *testing.T) {
-	msg := Connect{
-		ProtocolName:    "MQIsdp",
-		ProtocolVersion: 3,
-		UsernameFlag:    true,
-		PasswordFlag:    true,
-		WillRetain:      false,
-		WillQos:         1,
-		WillFlag:        true,
-		CleanSession:    true,
-		KeepAliveTimer:  10,
-		ClientId:        "xixihaha",
-		WillTopic:       "topic",
-		WillMessage:     "message",
-		Username:        "name",
-		Password:        "pwd",
-	}
+	tests := []struct {
+		Msg      Message
+		Expected gbt.Matcher
+	}{
+		{
+			Msg: &Connect{
+				ProtocolName:    "MQIsdp",
+				ProtocolVersion: 3,
+				UsernameFlag:    true,
+				PasswordFlag:    true,
+				WillRetain:      false,
+				WillQos:         1,
+				WillFlag:        true,
+				CleanSession:    true,
+				KeepAliveTimer:  10,
+				ClientId:        "xixihaha",
+				WillTopic:       "topic",
+				WillMessage:     "message",
+				Username:        "name",
+				Password:        "pwd",
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x10}},
+				gbt.Named{"Remaining length", gbt.Literal{12 + 5*2 + 8 + 5 + 7 + 4 + 3}},
 
-	expected := gbt.InOrder{
-		gbt.Named{"Header byte", gbt.Literal{0x10}},
-		gbt.Named{"Remaining length", gbt.Literal{12 + 5*2 + 8 + 5 + 7 + 4 + 3}},
+				// Extended headers for CONNECT:
+				gbt.Named{"Protocol name", gbt.InOrder{gbt.Literal{0x00, 0x06}, gbt.Literal("MQIsdp")}},
+				gbt.Named{
+					"Extended headers for CONNECT",
+					gbt.Literal{
+						0x03,       // Protocol version number
+						0xce,       // Connect flags
+						0x00, 0x0a, // Keep alive timer
+					},
+				},
 
-		// Extended headers for CONNECT:
-		gbt.Named{"Protocol name", gbt.InOrder{gbt.Literal{0x00, 0x06}, gbt.Literal("MQIsdp")}},
-		gbt.Named{
-			"Extended headers for CONNECT",
-			gbt.Literal{
-				0x03,       // Protocol version number
-				0xce,       // Connect flags
-				0x00, 0x0a, // Keep alive timer
+				// CONNECT payload:
+				gbt.Named{"Client identifier", gbt.InOrder{gbt.Literal{0x00, 0x08}, gbt.Literal("xixihaha")}},
+				gbt.Named{"Will topic", gbt.InOrder{gbt.Literal{0x00, 0x05}, gbt.Literal("topic")}},
+				gbt.Named{"Will message", gbt.InOrder{gbt.Literal{0x00, 0x07}, gbt.Literal("message")}},
+				gbt.Named{"Username", gbt.InOrder{gbt.Literal{0x00, 0x04}, gbt.Literal("name")}},
+				gbt.Named{"Password", gbt.InOrder{gbt.Literal{0x00, 0x03}, gbt.Literal("pwd")}},
 			},
 		},
-
-		// CONNECT payload:
-		gbt.Named{"Client identifier", gbt.InOrder{gbt.Literal{0x00, 0x08}, gbt.Literal("xixihaha")}},
-		gbt.Named{"Will topic", gbt.InOrder{gbt.Literal{0x00, 0x05}, gbt.Literal("topic")}},
-		gbt.Named{"Will message", gbt.InOrder{gbt.Literal{0x00, 0x07}, gbt.Literal("message")}},
-		gbt.Named{"Username", gbt.InOrder{gbt.Literal{0x00, 0x04}, gbt.Literal("name")}},
-		gbt.Named{"Password", gbt.InOrder{gbt.Literal{0x00, 0x03}, gbt.Literal("pwd")}},
 	}
 
-	encodedBuf := new(bytes.Buffer)
-	if err := msg.Encode(encodedBuf); err != nil {
-		t.Errorf("Unexpected error during encoding: %v", err)
-	} else if err = gbt.Matches(expected, encodedBuf.Bytes()); err != nil {
-		t.Errorf("Unexpected encoding output: %v", err)
-	}
+	for _, test := range tests {
+		encodedBuf := new(bytes.Buffer)
+		if err := test.Msg.Encode(encodedBuf); err != nil {
+			t.Errorf("Unexpected error during encoding: %v", err)
+		} else if err = gbt.Matches(test.Expected, encodedBuf.Bytes()); err != nil {
+			t.Errorf("Unexpected encoding output: %v", err)
+		}
 
-	expectedBuf := new(bytes.Buffer)
-	expected.Write(expectedBuf)
+		expectedBuf := new(bytes.Buffer)
+		test.Expected.Write(expectedBuf)
 
-	if decodedMsg, err := DecodeOneMessage(expectedBuf); err != nil {
-		t.Errorf("Unexpected error during decoding: %v", err)
-	} else if !reflect.DeepEqual(&msg, decodedMsg) {
-		t.Errorf("Decoded value mismatch\n     got = %#v\nexpected = %#v", msg, decodedMsg)
+		if decodedMsg, err := DecodeOneMessage(expectedBuf); err != nil {
+			t.Errorf("Unexpected error during decoding: %v", err)
+		} else if !reflect.DeepEqual(test.Msg, decodedMsg) {
+			t.Errorf("Decoded value mismatch\n     got = %#v\nexpected = %#v",
+				decodedMsg, test.Msg)
+		}
 	}
 }
 
