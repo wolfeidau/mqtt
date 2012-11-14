@@ -12,10 +12,12 @@ var bitCnt = uint32(0)
 
 func Test(t *testing.T) {
 	tests := []struct {
+		Comment  string
 		Msg      Message
 		Expected gbt.Matcher
 	}{
 		{
+			Comment: "CONNECT message",
 			Msg: &Connect{
 				ProtocolName:    "MQIsdp",
 				ProtocolVersion: 3,
@@ -55,24 +57,38 @@ func Test(t *testing.T) {
 				gbt.Named{"Password", gbt.InOrder{gbt.Literal{0x00, 0x03}, gbt.Literal("pwd")}},
 			},
 		},
+
+		{
+			Comment: "CONNACK message",
+			Msg: &ConnAck{
+				ReturnCode: RetCodeBadUsernameOrPassword,
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x20}},
+				gbt.Named{"Remaining length", gbt.Literal{2}},
+
+				gbt.Named{"Reserved byte", gbt.Literal{0}},
+				gbt.Named{"Return code", gbt.Literal{4}},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		encodedBuf := new(bytes.Buffer)
 		if err := test.Msg.Encode(encodedBuf); err != nil {
-			t.Errorf("Unexpected error during encoding: %v", err)
+			t.Errorf("%s: Unexpected error during encoding: %v", test.Comment, err)
 		} else if err = gbt.Matches(test.Expected, encodedBuf.Bytes()); err != nil {
-			t.Errorf("Unexpected encoding output: %v", err)
+			t.Errorf("%s: Unexpected encoding output: %v", test.Comment, err)
 		}
 
 		expectedBuf := new(bytes.Buffer)
 		test.Expected.Write(expectedBuf)
 
 		if decodedMsg, err := DecodeOneMessage(expectedBuf); err != nil {
-			t.Errorf("Unexpected error during decoding: %v", err)
+			t.Errorf("%s: Unexpected error during decoding: %v", test.Comment, err)
 		} else if !reflect.DeepEqual(test.Msg, decodedMsg) {
-			t.Errorf("Decoded value mismatch\n     got = %#v\nexpected = %#v",
-				decodedMsg, test.Msg)
+			t.Errorf("%s: Decoded value mismatch\n     got = %#v\nexpected = %#v",
+				test.Comment, decodedMsg, test.Msg)
 		}
 	}
 }
