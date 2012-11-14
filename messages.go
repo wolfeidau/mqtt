@@ -297,8 +297,12 @@ func (msg *PubComp) Encode(w io.Writer) error {
 type Subscribe struct {
 	Header
 	MessageId uint16
-	Topics []string
-	TopicsQos []QosLevel
+	Topics []TopicQos
+}
+
+type TopicQos struct {
+	Topic string
+	Qos QosLevel
 }
 
 func (msg *Subscribe) Encode(w io.Writer) (err error) {
@@ -306,9 +310,9 @@ func (msg *Subscribe) Encode(w io.Writer) (err error) {
 	if msg.Header.QosLevel.HasId() {
 		setUint16(msg.MessageId, buf)
 	}
-	for i := 0; i < len(msg.Topics); i += 1 {
-		setString(msg.Topics[i], buf)
-		setUint8(uint8(msg.TopicsQos[i]), buf)
+	for _, topicSub := range msg.Topics {
+		setString(topicSub.Topic, buf)
+		setUint8(uint8(topicSub.Qos), buf)
 	}
 
 	return writeMessage(w, MsgSubscribe, &msg.Header, buf)
@@ -322,14 +326,14 @@ func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (er
 	if msg.Header.QosLevel.HasId() {
 		msg.MessageId = getUint16(r, &packetRemaining)
 	}
-	topics := make([]string, 0)
-	topicsQos := make([]QosLevel, 0)
+	var topics []TopicQos
 	for packetRemaining > 0 {
-		topics = append(topics, getString(r, &packetRemaining))
-		topicsQos = append(topicsQos, QosLevel(getUint8(r, &packetRemaining)))
+		topics = append(topics, TopicQos{
+			Topic: getString(r, &packetRemaining),
+			Qos: QosLevel(getUint8(r, &packetRemaining)),
+		})
 	}
 	msg.Topics = topics
-	msg.TopicsQos = topicsQos
 
 	return nil
 }
