@@ -1,5 +1,46 @@
-// Implementation of MQTT V3.1.
+// Implementation of MQTT V3.1 encoding and decoding.
+//
 // See http://public.dhe.ibm.com/software/dw/webservices/ws-mqtt/mqtt-v3r1.html
+// for the MQTT semantics, which this package does not.
+//
+// Decoding Messages:
+//
+// Use the `DecodeOneMessage` function to read a Message from an `io.Reader`, it
+// will return a Message value. The function can be implemented using the public
+// API of this package if more control is required. For example:
+//
+// for {
+//   msg, err := mqtt.DecodeOneMessage(conn, nil)
+//   if err != nil {
+//     // handle err
+//   }
+//   switch msg := msg.(type) {
+//   case *Connect:
+//     // ...
+//   case *Publish:
+//     // ...
+//     // etc.
+//   }
+// }
+//
+// Encoding Messages:
+//
+// Create a message value, and use its `Encode` method to write it to an
+// `io.Writer`. For example:
+//
+// msg := &Publish{
+//   Header: {
+//     DupFlag: false,
+//     QosLevel: QosAtLeastOnce,
+//     Retain: false,
+//   },
+//   TopicName: "a/b",
+//   MessageId: 10,
+//   Payload: BytesPayload(someBytesData),
+// }
+// if err := msg.Encode(conn); err != nil {
+//   // handle err
+// }
 package mqtt
 
 import (
