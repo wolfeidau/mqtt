@@ -14,23 +14,22 @@ type Payload interface {
 	// WritePayload writes the payload data to w.
 	WritePayload(w io.Writer) error
 
-	// ReadPayload reads the full n bytes of payload data from r.
-	ReadPayload(r io.Reader, n int) error
+	// ReadPayload reads the payload data from r.
+	ReadPayload(r io.Reader) error
 }
 
 type BytesPayload []byte
 
-func (p *BytesPayload) Size() int {
-	return len(*p)
+func (p BytesPayload) Size() int {
+	return len(p)
 }
 
-func (p *BytesPayload) WritePayload(w io.Writer) error {
-	_, err := w.Write(*p)
+func (p BytesPayload) WritePayload(w io.Writer) error {
+	_, err := w.Write(p)
 	return err
 }
 
-func (p *BytesPayload) ReadPayload(r io.Reader, n int) error {
-	*p = make([]byte, n)
-	_, err := io.ReadFull(r, *p)
+func (p BytesPayload) ReadPayload(r io.Reader) error {
+	_, err := io.ReadFull(r, p)
 	return err
 }

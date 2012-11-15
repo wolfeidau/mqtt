@@ -81,7 +81,7 @@ func TestEncodeDecode(t *testing.T) {
 					Retain:   false,
 				},
 				TopicName: "a/b",
-				Payload:   &BytesPayload{1, 2, 3},
+				Payload:   BytesPayload{1, 2, 3},
 			},
 			Expected: gbt.InOrder{
 				gbt.Named{"Header byte", gbt.Literal{0x30}},
@@ -103,7 +103,7 @@ func TestEncodeDecode(t *testing.T) {
 				},
 				TopicName: "a/b",
 				MessageId: 0x1234,
-				Payload:   &BytesPayload{1, 2, 3},
+				Payload:   BytesPayload{1, 2, 3},
 			},
 			Expected: gbt.InOrder{
 				gbt.Named{"Header byte", gbt.Literal{0x3a}},
@@ -214,7 +214,7 @@ func TestEncodeDecode(t *testing.T) {
 		expectedBuf := new(bytes.Buffer)
 		test.Expected.Write(expectedBuf)
 
-		if decodedMsg, err := DecodeOneMessage(expectedBuf); err != nil {
+		if decodedMsg, err := DecodeOneMessage(expectedBuf, nil); err != nil {
 			t.Errorf("%s: Unexpected error during decoding: %v", test.Comment, err)
 		} else if !reflect.DeepEqual(test.Msg, decodedMsg) {
 			t.Errorf("%s: Decoded value mismatch\n     got = %#v\nexpected = %#v",
@@ -260,7 +260,7 @@ func TestErrorDecode(t *testing.T) {
 		expectedBuf := new(bytes.Buffer)
 		test.Expected.Write(expectedBuf)
 
-		if _, err := DecodeOneMessage(expectedBuf); err == nil {
+		if _, err := DecodeOneMessage(expectedBuf, nil); err == nil {
 			t.Errorf("%s: Expected error during decoding, but got nil.", test.Comment)
 		}
 	}

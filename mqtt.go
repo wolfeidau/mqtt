@@ -52,8 +52,25 @@ func (rc ReturnCode) IsValid() bool {
 	return rc >= RetCodeAccepted && rc < retCodeFirstInvalid
 }
 
-// DecodeOneMessage decodes one message from r.
-func DecodeOneMessage(r io.Reader) (msg Message, err error) {
+// DecoderConfig provides configuration for decoding messages.
+type DecoderConfig interface {
+	// MakePayload returns a Payload for the given Publish message. r is the
+	// Reader that will read the payload data, and n is the number of bytes in
+	// the payload. The Payload.ReadPayload method is called on the returned
+	// payload by the decoding process.
+	MakePayload(msg *Publish, r io.Reader, n int) (Payload, error)
+}
+
+type DefaultDecoderConfig struct{}
+
+func (c DefaultDecoderConfig) MakePayload(msg *Publish, r io.Reader, n int) (Payload, error) {
+	return make(BytesPayload, n), nil
+}
+
+// DecodeOneMessage decodes one message from r. config provides specifics on
+// how to decode messages, nil indicates that the DefaultDecoderConfig should
+// be used.
+func DecodeOneMessage(r io.Reader, config DecoderConfig) (msg Message, err error) {
 	var hdr Header
 	var msgType MessageType
 	var packetRemaining int32
@@ -64,7 +81,11 @@ func DecodeOneMessage(r io.Reader) (msg Message, err error) {
 		return
 	}
 
-	return msg, msg.Decode(r, hdr, packetRemaining)
+	if config == nil {
+		config = DefaultDecoderConfig{}
+	}
+
+	return msg, msg.Decode(r, hdr, packetRemaining, config)
 }
 
 // NewMessage creates an instance of a Message value for the given message

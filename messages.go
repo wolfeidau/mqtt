@@ -64,7 +64,7 @@ type Message interface {
 	// Decode reads the message extended headers and payload from
 	// r. Typically the values for hdr and packetRemaining will
 	// be returned from Header.Decode.
-	Decode(r io.Reader, hdr Header, packetRemaining int32) error
+	Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) error
 }
 
 // MessageType constants.
@@ -154,7 +154,7 @@ func (msg *Connect) Encode(w io.Writer) (err error) {
 	return writeMessage(w, MsgConnect, &msg.Header, buf, 0)
 }
 
-func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
+func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
@@ -213,7 +213,7 @@ func (msg *ConnAck) Encode(w io.Writer) (err error) {
 	return writeMessage(w, MsgConnAck, &msg.Header, buf, 0)
 }
 
-func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
+func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
@@ -256,7 +256,7 @@ func (msg *Publish) Encode(w io.Writer) (err error) {
 	return msg.Payload.WritePayload(w)
 }
 
-func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
+func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
@@ -267,8 +267,14 @@ func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 	if msg.Header.QosLevel.HasId() {
 		msg.MessageId = getUint16(r, &packetRemaining)
 	}
-	msg.Payload = new(BytesPayload)
-	return msg.Payload.ReadPayload(&io.LimitedReader{r, int64(packetRemaining)}, int(packetRemaining))
+
+	payloadReader := &io.LimitedReader{r, int64(packetRemaining)}
+
+	if msg.Payload, err = config.MakePayload(msg, payloadReader, int(packetRemaining)); err != nil {
+		return
+	}
+
+	return msg.Payload.ReadPayload(payloadReader)
 }
 
 // PubAck represents an MQTT PUBACK message.
@@ -332,7 +338,7 @@ func (msg *Subscribe) Encode(w io.Writer) (err error) {
 	return writeMessage(w, MsgSubscribe, &msg.Header, buf, 0)
 }
 
-func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
+func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
@@ -371,7 +377,7 @@ func (msg *SubAck) Encode(w io.Writer) (err error) {
 	return writeMessage(w, MsgSubAck, &msg.Header, buf, 0)
 }
 
-func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
+func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
@@ -408,7 +414,7 @@ func (msg *Unsubscribe) Encode(w io.Writer) (err error) {
 	return writeMessage(w, MsgUnsubscribe, &msg.Header, buf, 0)
 }
 
-func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
+func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
@@ -445,7 +451,7 @@ func (msg *PingReq) Encode(w io.Writer) error {
 	return msg.Header.Encode(w, MsgPingReq, 0)
 }
 
-func (msg *PingReq) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+func (msg *PingReq) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) error {
 	if packetRemaining != 0 {
 		return msgTooLongError
 	}
@@ -461,7 +467,7 @@ func (msg *PingResp) Encode(w io.Writer) error {
 	return msg.Header.Encode(w, MsgPingResp, 0)
 }
 
-func (msg *PingResp) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+func (msg *PingResp) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) error {
 	if packetRemaining != 0 {
 		return msgTooLongError
 	}
@@ -477,7 +483,7 @@ func (msg *Disconnect) Encode(w io.Writer) error {
 	return msg.Header.Encode(w, MsgDisconnect, 0)
 }
 
-func (msg *Disconnect) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+func (msg *Disconnect) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) error {
 	if packetRemaining != 0 {
 		return msgTooLongError
 	}
@@ -498,7 +504,7 @@ func (msg *AckCommon) encode(w io.Writer, msgType MessageType) (err error) {
 	return writeMessage(w, msgType, &msg.Header, buf, 0)
 }
 
-func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
+func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
