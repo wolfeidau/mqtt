@@ -5,6 +5,11 @@ import (
 	"io"
 )
 
+const (
+	// Maximum payload size in bytes (256MiB - 1B).
+	MaxPayloadSize = (1 << (4 * 7)) - 1
+)
+
 // Header contains the common attributes of all messages. Some attributes are
 // not applicable to some message types.
 type Header struct {
@@ -95,7 +100,12 @@ func (mt MessageType) IsValid() bool {
 }
 
 func writeMessage(w io.Writer, msgType MessageType, hdr *Header, payloadBuf *bytes.Buffer, extraLength int32) error {
-	err := hdr.Encode(w, msgType, int32(len(payloadBuf.Bytes()))+extraLength)
+	totalPayloadLength := int64(len(payloadBuf.Bytes())) + int64(extraLength)
+	if totalPayloadLength > MaxPayloadSize {
+		return msgTooLongError
+	}
+
+	err := hdr.Encode(w, msgType, int32(totalPayloadLength))
 	if err != nil {
 		return err
 	}

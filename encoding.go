@@ -95,20 +95,15 @@ func decodeLength(r io.Reader) int32 {
 
 func encodeLength(length int32, buf *bytes.Buffer) {
 	if length == 0 {
-		buf.WriteByte(byte(0))
+		buf.WriteByte(0)
 		return
 	}
-	var lbuf bytes.Buffer
 	for length > 0 {
-		digit := length % 128
-		length = length / 128
+		digit := length & 0x7f
+		length = length >> 7
 		if length > 0 {
 			digit = digit | 0x80
 		}
-		lbuf.WriteByte(byte(digit))
-	}
-	blen := lbuf.Bytes()
-	for i := 1; i <= len(blen); i += 1 {
-		buf.WriteByte(blen[len(blen)-i])
+		buf.WriteByte(byte(digit))
 	}
 }

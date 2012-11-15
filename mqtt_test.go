@@ -2,19 +2,39 @@ package mqtt
 
 import (
 	"bytes"
+	"io"
 	"reflect"
 	"testing"
 
 	gbt "github.com/huin/gobinarytest"
 )
 
-var bitCnt = uint32(0)
+type fakeSizePayload int
+
+func (p fakeSizePayload) Size() int {
+	return int(p)
+}
+
+func (p fakeSizePayload) WritePayload(w io.Writer) error {
+	return nil
+}
+
+func (p fakeSizePayload) ReadPayload(r io.Reader) error {
+	return nil
+}
+
+type fakeDecoderConfig struct{}
+
+func (c fakeDecoderConfig) MakePayload(msg *Publish, r io.Reader, n int) (Payload, error) {
+	return fakeSizePayload(n), nil
+}
 
 func TestEncodeDecode(t *testing.T) {
 	tests := []struct {
-		Comment  string
-		Msg      Message
-		Expected gbt.Matcher
+		Comment       string
+		DecoderConfig DecoderConfig
+		Msg           Message
+		Expected      gbt.Matcher
 	}{
 		{
 			Comment: "CONNECT message",
@@ -112,6 +132,27 @@ func TestEncodeDecode(t *testing.T) {
 				gbt.Named{"Topic", gbt.Literal{0x00, 0x03, 'a', '/', 'b'}},
 				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
 				gbt.Named{"Data", gbt.Literal{1, 2, 3}},
+			},
+		},
+
+		{
+			Comment:       "PUBLISH message with maximum size payload",
+			DecoderConfig: fakeDecoderConfig{},
+			Msg: &Publish{
+				Header: Header{
+					DupFlag:  false,
+					QosLevel: QosAtMostOnce,
+					Retain:   false,
+				},
+				TopicName: "a/b",
+				Payload:   fakeSizePayload(MaxPayloadSize - 5),
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x30}},
+				gbt.Named{"Remaining length", gbt.Literal{0xff, 0xff, 0xff, 0x7f}},
+
+				gbt.Named{"Topic", gbt.Literal{0x00, 0x03, 'a', '/', 'b'}},
+				// Our fake payload doesn't write any data, so no data should appear here.
 			},
 		},
 
@@ -214,11 +255,44 @@ func TestEncodeDecode(t *testing.T) {
 		expectedBuf := new(bytes.Buffer)
 		test.Expected.Write(expectedBuf)
 
-		if decodedMsg, err := DecodeOneMessage(expectedBuf, nil); err != nil {
+		if decodedMsg, err := DecodeOneMessage(expectedBuf, test.DecoderConfig); err != nil {
 			t.Errorf("%s: Unexpected error during decoding: %v", test.Comment, err)
 		} else if !reflect.DeepEqual(test.Msg, decodedMsg) {
 			t.Errorf("%s: Decoded value mismatch\n     got = %#v\nexpected = %#v",
 				test.Comment, decodedMsg, test.Msg)
+		}
+	}
+}
+
+func TestErrorEncode(t *testing.T) {
+	tests := []struct {
+		Comment string
+		Msg     Message
+	}{
+		{
+			Comment: "Payload reports Size() that's too large for MQTT payload.",
+			Msg: &Publish{
+				TopicName: "big/message",
+				MessageId: 0x1234,
+				// MaxPayloadSize-5 is too large - the payload space is further
+				// restricted by the variable header.
+				Payload: fakeSizePayload(MaxPayloadSize),
+			},
+		},
+		{
+			Comment: "Payload reports Size() that would overflow when added to variable header size.",
+			Msg: &Publish{
+				TopicName: "big/message",
+				MessageId: 0x1234,
+				Payload:   fakeSizePayload(0x7fffffff),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		encodedBuf := new(bytes.Buffer)
+		if err := test.Msg.Encode(encodedBuf); err == nil {
+			t.Errorf("%s: Expected error during encoding, but got nil.", test.Comment)
 		}
 	}
 }
@@ -266,30 +340,43 @@ func TestErrorDecode(t *testing.T) {
 	}
 }
 
-func TestDecodeLength(t *testing.T) {
+func TestLengthEncodeDecode(t *testing.T) {
 	tests := []struct {
-		Expected int32
-		Bytes    []byte
+		Value   int32
+		Encoded gbt.Matcher
 	}{
-		{0, []byte{0}},
-		{1, []byte{1}},
-		{20, []byte{20}},
+		{0, gbt.Literal{0}},
+		{1, gbt.Literal{1}},
+		{20, gbt.Literal{20}},
 
 		// Boundary conditions used as tests taken from MQTT 3.1 spec.
-		{0, []byte{0x00}},
-		{127, []byte{0x7F}},
-		{128, []byte{0x80, 0x01}},
-		{16383, []byte{0xFF, 0x7F}},
-		{16384, []byte{0x80, 0x80, 0x01}},
-		{2097151, []byte{0xFF, 0xFF, 0x7F}},
-		{2097152, []byte{0x80, 0x80, 0x80, 0x01}},
-		{268435455, []byte{0xFF, 0xFF, 0xFF, 0x7F}},
+		{0, gbt.Literal{0x00}},
+		{127, gbt.Literal{0x7F}},
+		{128, gbt.Literal{0x80, 0x01}},
+		{16383, gbt.Literal{0xFF, 0x7F}},
+		{16384, gbt.Literal{0x80, 0x80, 0x01}},
+		{2097151, gbt.Literal{0xFF, 0xFF, 0x7F}},
+		{2097152, gbt.Literal{0x80, 0x80, 0x80, 0x01}},
+		{268435455, gbt.Literal{0xFF, 0xFF, 0xFF, 0x7F}},
 	}
 
 	for _, test := range tests {
-		buf := bytes.NewBuffer(test.Bytes)
-		if result := decodeLength(buf); test.Expected != result {
-			t.Errorf("Test %v: got %d", test, result)
+		{
+			// Test decoding.
+			buf := new(bytes.Buffer)
+			test.Encoded.Write(buf)
+			buf = bytes.NewBuffer(buf.Bytes())
+			if result := decodeLength(buf); test.Value != result {
+				t.Errorf("Decoding test %#x: got %#x", test.Value, result)
+			}
+		}
+		{
+			// Test encoding.
+			buf := new(bytes.Buffer)
+			encodeLength(test.Value, buf)
+			if err := gbt.Matches(test.Encoded, buf.Bytes()); err != nil {
+				t.Errorf("Encoding test %#x: %v", test.Value, err)
+			}
 		}
 	}
 }
