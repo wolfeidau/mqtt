@@ -1,7 +1,8 @@
 // Implementation of MQTT V3.1 encoding and decoding.
 //
 // See http://public.dhe.ibm.com/software/dw/webservices/ws-mqtt/mqtt-v3r1.html
-// for the MQTT semantics, which this package does not.
+// for the MQTT protocol specification. This package does not implement the
+// semantics of MQTT, but purely the encoding and decoding of its messages.
 //
 // Decoding Messages:
 //
