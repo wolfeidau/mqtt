@@ -114,6 +114,46 @@ func Test(t *testing.T) {
 				gbt.Named{"Data", gbt.Literal{1, 2, 3}},
 			},
 		},
+
+		{
+			Comment: "PUBACK message",
+			Msg: &PubAck{
+				AckCommon: AckCommon{
+					MessageId: 0x1234,
+				},
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x40}},
+				gbt.Named{"Remaining length", gbt.Literal{2}},
+
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
+			},
+		},
+
+		{
+			Comment: "SUBSCRIBE message",
+			Msg: &Subscribe{
+				Header: Header{
+					DupFlag:  false,
+					QosLevel: QosAtLeastOnce,
+				},
+				MessageId: 0x4321,
+				Topics: []TopicQos{
+					{"a/b", QosAtLeastOnce},
+					{"c/d", QosExactlyOnce},
+				},
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x82}},
+				gbt.Named{"Remaining length", gbt.Literal{2 + 5 + 1 + 5 + 1}},
+
+				gbt.Named{"MessageId", gbt.Literal{0x43, 0x21}},
+				gbt.Named{"First topic", gbt.Literal{0x00, 0x03, 'a', '/', 'b'}},
+				gbt.Named{"First topic QoS", gbt.Literal{1}},
+				gbt.Named{"Second topic", gbt.Literal{0x00, 0x03, 'c', '/', 'd'}},
+				gbt.Named{"Second topic QoS", gbt.Literal{2}},
+			},
+		},
 	}
 
 	for _, test := range tests {

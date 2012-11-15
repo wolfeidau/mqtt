@@ -329,6 +329,8 @@ func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (er
 		err = recoverError(err, recover())
 	}()
 
+	msg.Header = hdr
+
 	if msg.Header.QosLevel.HasId() {
 		msg.MessageId = getUint16(r, &packetRemaining)
 	}
