@@ -191,6 +191,10 @@ func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 		msg.Password = getString(r, &packetRemaining)
 	}
 
+	if packetRemaining != 0 {
+		return msgTooLongError
+	}
+
 	return nil
 }
 
@@ -220,6 +224,10 @@ func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 	msg.ReturnCode = ReturnCode(getUint8(r, &packetRemaining))
 	if !msg.ReturnCode.IsValid() {
 		return badReturnCodeError
+	}
+
+	if packetRemaining != 0 {
+		return msgTooLongError
 	}
 
 	return nil
@@ -438,6 +446,9 @@ func (msg *PingReq) Encode(w io.Writer) error {
 }
 
 func (msg *PingReq) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+	if packetRemaining != 0 {
+		return msgTooLongError
+	}
 	return nil
 }
 
@@ -451,6 +462,9 @@ func (msg *PingResp) Encode(w io.Writer) error {
 }
 
 func (msg *PingResp) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+	if packetRemaining != 0 {
+		return msgTooLongError
+	}
 	return nil
 }
 
@@ -464,6 +478,9 @@ func (msg *Disconnect) Encode(w io.Writer) error {
 }
 
 func (msg *Disconnect) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+	if packetRemaining != 0 {
+		return msgTooLongError
+	}
 	return nil
 }
 
@@ -489,6 +506,10 @@ func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32) (er
 	msg.Header = hdr
 
 	msg.MessageId = getUint16(r, &packetRemaining)
+
+	if packetRemaining != 0 {
+		return msgTooLongError
+	}
 
 	return nil
 }

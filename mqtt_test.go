@@ -10,7 +10,7 @@ import (
 
 var bitCnt = uint32(0)
 
-func Test(t *testing.T) {
+func TestEncodeDecode(t *testing.T) {
 	tests := []struct {
 		Comment  string
 		Msg      Message
@@ -203,8 +203,6 @@ func Test(t *testing.T) {
 		},
 	}
 
-	// TODO: Test (error cases?) for packets with spurious remaining lengths.
-
 	for _, test := range tests {
 		encodedBuf := new(bytes.Buffer)
 		if err := test.Msg.Encode(encodedBuf); err != nil {
@@ -221,6 +219,49 @@ func Test(t *testing.T) {
 		} else if !reflect.DeepEqual(test.Msg, decodedMsg) {
 			t.Errorf("%s: Decoded value mismatch\n     got = %#v\nexpected = %#v",
 				test.Comment, decodedMsg, test.Msg)
+		}
+	}
+}
+
+func TestErrorDecode(t *testing.T) {
+	tests := []struct {
+		Comment  string
+		Expected gbt.Matcher
+	}{
+		{
+			Comment: "Immediate EOF",
+			Expected: gbt.Literal{},
+		},
+		{
+			Comment: "EOF at 1 byte",
+			Expected: gbt.Literal{0x10},
+		},
+		{
+			Comment: "PUBACK message with too short a length",
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x40}},
+				gbt.Named{"Remaining length", gbt.Literal{1}},
+
+				gbt.Named{"Truncated MessageId", gbt.Literal{0x12}},
+			},
+		},
+		{
+			Comment: "PUBACK message with too long a length",
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x40}},
+				gbt.Named{"Remaining length", gbt.Literal{3}},
+
+				gbt.Named{"Truncated MessageId", gbt.Literal{0x12, 0x34, 0x56}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		expectedBuf := new(bytes.Buffer)
+		test.Expected.Write(expectedBuf)
+
+		if _, err := DecodeOneMessage(expectedBuf); err == nil {
+			t.Errorf("%s: Expected error during decoding, but got nil.", test.Comment)
 		}
 	}
 }
