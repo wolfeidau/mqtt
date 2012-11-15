@@ -54,10 +54,10 @@ func (rc ReturnCode) IsValid() bool {
 
 // DecoderConfig provides configuration for decoding messages.
 type DecoderConfig interface {
-	// MakePayload returns a Payload for the given Publish message. r is the
-	// Reader that will read the payload data, and n is the number of bytes in
-	// the payload. The Payload.ReadPayload method is called on the returned
-	// payload by the decoding process.
+	// MakePayload returns a Payload for the given Publish message. r is a Reader
+	// that will read the payload data, and n is the number of bytes in the
+	// payload. The Payload.ReadPayload method is called on the returned payload
+	// by the decoding process.
 	MakePayload(msg *Publish, r io.Reader, n int) (Payload, error)
 }
 
