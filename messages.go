@@ -289,38 +289,62 @@ func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32, confi
 
 // PubAck represents an MQTT PUBACK message.
 type PubAck struct {
-	AckCommon
+	Header
+	MessageId uint16
 }
 
 func (msg *PubAck) Encode(w io.Writer) error {
-	return msg.AckCommon.encode(w, MsgPubAck)
+	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubAck)
+}
+
+func (msg *PubAck) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
+	msg.Header = hdr
+	return decodeAckCommon(r, packetRemaining, &msg.MessageId, config)
 }
 
 // PubRec represents an MQTT PUBREC message.
 type PubRec struct {
-	AckCommon
+	Header
+	MessageId uint16
 }
 
 func (msg *PubRec) Encode(w io.Writer) error {
-	return msg.AckCommon.encode(w, MsgPubRec)
+	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubRec)
+}
+
+func (msg *PubRec) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
+	msg.Header = hdr
+	return decodeAckCommon(r, packetRemaining, &msg.MessageId, config)
 }
 
 // PubRel represents an MQTT PUBREL message.
 type PubRel struct {
-	AckCommon
+	Header
+	MessageId uint16
 }
 
 func (msg *PubRel) Encode(w io.Writer) error {
-	return msg.AckCommon.encode(w, MsgPubRel)
+	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubRel)
+}
+
+func (msg *PubRel) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
+	msg.Header = hdr
+	return decodeAckCommon(r, packetRemaining, &msg.MessageId, config)
 }
 
 // PubComp represents an MQTT PUBCOMP message.
 type PubComp struct {
-	AckCommon
+	Header
+	MessageId uint16
 }
 
 func (msg *PubComp) Encode(w io.Writer) error {
-	return msg.AckCommon.encode(w, MsgPubComp)
+	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubComp)
+}
+
+func (msg *PubComp) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
+	msg.Header = hdr
+	return decodeAckCommon(r, packetRemaining, &msg.MessageId, config)
 }
 
 // Subscribe represents an MQTT SUBSCRIBE message.
@@ -445,11 +469,17 @@ func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32, c
 
 // UnsubAck represents an MQTT UNSUBACK message.
 type UnsubAck struct {
-	AckCommon
+	Header
+	MessageId uint16
 }
 
 func (msg *UnsubAck) Encode(w io.Writer) error {
-	return msg.AckCommon.encode(w, MsgUnsubAck)
+	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgUnsubAck)
+}
+
+func (msg *UnsubAck) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
+	msg.Header = hdr
+	return decodeAckCommon(r, packetRemaining, &msg.MessageId, config)
 }
 
 // PingReq represents an MQTT PINGREQ message.
@@ -500,28 +530,18 @@ func (msg *Disconnect) Decode(r io.Reader, hdr Header, packetRemaining int32, co
 	return nil
 }
 
-// AckCommon is not an actual message, but represents the common elements of
-// many similar messages.
-type AckCommon struct {
-	Header
-	MessageId uint16
-}
-
-func (msg *AckCommon) encode(w io.Writer, msgType MessageType) (err error) {
+func encodeAckCommon(w io.Writer, hdr *Header, messageId uint16, msgType MessageType) error {
 	buf := new(bytes.Buffer)
-	setUint16(msg.MessageId, buf)
-
-	return writeMessage(w, msgType, &msg.Header, buf, 0)
+	setUint16(messageId, buf)
+	return writeMessage(w, msgType, hdr, buf, 0)
 }
 
-func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
+func decodeAckCommon(r io.Reader, packetRemaining int32, messageId *uint16, config DecoderConfig) (err error) {
 	defer func() {
 		err = recoverError(err, recover())
 	}()
 
-	msg.Header = hdr
-
-	msg.MessageId = getUint16(r, &packetRemaining)
+	*messageId = getUint16(r, &packetRemaining)
 
 	if packetRemaining != 0 {
 		return msgTooLongError

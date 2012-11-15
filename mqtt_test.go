@@ -158,15 +158,40 @@ func TestEncodeDecode(t *testing.T) {
 
 		{
 			Comment: "PUBACK message",
-			Msg: &PubAck{
-				AckCommon: AckCommon{
-					MessageId: 0x1234,
-				},
-			},
+			Msg:     &PubAck{MessageId: 0x1234},
 			Expected: gbt.InOrder{
 				gbt.Named{"Header byte", gbt.Literal{0x40}},
 				gbt.Named{"Remaining length", gbt.Literal{2}},
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
+			},
+		},
 
+		{
+			Comment: "PUBREC message",
+			Msg:     &PubRec{MessageId: 0x1234},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x50}},
+				gbt.Named{"Remaining length", gbt.Literal{2}},
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
+			},
+		},
+
+		{
+			Comment: "PUBREL message",
+			Msg:     &PubRel{MessageId: 0x1234},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x60}},
+				gbt.Named{"Remaining length", gbt.Literal{2}},
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
+			},
+		},
+
+		{
+			Comment: "PUBCOMP message",
+			Msg:     &PubComp{MessageId: 0x1234},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x70}},
+				gbt.Named{"Remaining length", gbt.Literal{2}},
 				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
 			},
 		},
@@ -197,6 +222,20 @@ func TestEncodeDecode(t *testing.T) {
 		},
 
 		{
+			Comment: "SUBACK message",
+			Msg: &SubAck{
+				MessageId: 0x1234,
+				TopicsQos: []QosLevel{QosAtMostOnce, QosExactlyOnce},
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x90}},
+				gbt.Named{"Remaining length", gbt.Literal{4}},
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
+				gbt.Named{"TopicsQos", gbt.Literal{0x00, 0x02}},
+			},
+		},
+
+		{
 			Comment: "UNSUBSCRIBE message",
 			Msg: &Unsubscribe{
 				Header: Header{
@@ -213,6 +252,16 @@ func TestEncodeDecode(t *testing.T) {
 				gbt.Named{"MessageId", gbt.Literal{0x43, 0x21}},
 				gbt.Named{"First topic", gbt.Literal{0x00, 0x03, 'a', '/', 'b'}},
 				gbt.Named{"Second topic", gbt.Literal{0x00, 0x03, 'c', '/', 'd'}},
+			},
+		},
+
+		{
+			Comment: "UNSUBACK message",
+			Msg:     &UnsubAck{MessageId: 0x1234},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0xb0}},
+				gbt.Named{"Remaining length", gbt.Literal{2}},
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
 			},
 		},
 
