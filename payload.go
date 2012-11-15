@@ -6,7 +6,8 @@ import (
 
 // Payload is the interface for Publish payloads. Typically the BytesPayload
 // implementation will be sufficient for small payloads whose full contents
-// will exist in memory.
+// will exist in memory. However, other implementations can read or write
+// payloads requiring them holding their complete contents in memory.
 type Payload interface {
 	// Size returns the number of bytes that WritePayload will write.
 	Size() int
