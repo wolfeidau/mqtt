@@ -46,9 +46,9 @@ func (hdr *Header) Decode(r io.Reader) (msgType MessageType, remainingLength int
 	msgType = MessageType(byte1 & 0xF0 >> 4)
 
 	*hdr = Header{
-		DupFlag:     byte1&0x08 > 0,
-		QosLevel:    QosLevel(byte1 & 0x06 >> 1),
-		Retain:      byte1&0x01 > 0,
+		DupFlag:  byte1&0x08 > 0,
+		QosLevel: QosLevel(byte1 & 0x06 >> 1),
+		Retain:   byte1&0x01 > 0,
 	}
 
 	remainingLength = decodeLength(r)
@@ -159,6 +159,8 @@ func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 		err = recoverError(err, recover())
 	}()
 
+	msg.Header = hdr
+
 	protocolName := getString(r, &packetRemaining)
 	protocolVersion := getUint8(r, &packetRemaining)
 	flags := getUint8(r, &packetRemaining)
@@ -212,6 +214,8 @@ func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 		err = recoverError(err, recover())
 	}()
 
+	msg.Header = hdr
+
 	getUint8(r, &packetRemaining) // Skip reserved byte.
 	msg.ReturnCode = ReturnCode(getUint8(r, &packetRemaining))
 	if !msg.ReturnCode.IsValid() {
@@ -226,7 +230,7 @@ type Publish struct {
 	Header
 	TopicName string
 	MessageId uint16
-	Data []byte
+	Data      []byte
 }
 
 func (msg *Publish) Encode(w io.Writer) (err error) {
@@ -245,6 +249,8 @@ func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 	defer func() {
 		err = recoverError(err, recover())
 	}()
+
+	msg.Header = hdr
 
 	msg.TopicName = getString(r, &packetRemaining)
 	if msg.Header.QosLevel.HasId() {
@@ -297,12 +303,12 @@ func (msg *PubComp) Encode(w io.Writer) error {
 type Subscribe struct {
 	Header
 	MessageId uint16
-	Topics []TopicQos
+	Topics    []TopicQos
 }
 
 type TopicQos struct {
 	Topic string
-	Qos QosLevel
+	Qos   QosLevel
 }
 
 func (msg *Subscribe) Encode(w io.Writer) (err error) {
@@ -330,7 +336,7 @@ func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (er
 	for packetRemaining > 0 {
 		topics = append(topics, TopicQos{
 			Topic: getString(r, &packetRemaining),
-			Qos: QosLevel(getUint8(r, &packetRemaining)),
+			Qos:   QosLevel(getUint8(r, &packetRemaining)),
 		})
 	}
 	msg.Topics = topics
@@ -360,6 +366,8 @@ func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err e
 		err = recoverError(err, recover())
 	}()
 
+	msg.Header = hdr
+
 	msg.MessageId = getUint16(r, &packetRemaining)
 	topicsQos := make([]QosLevel, 0)
 	for packetRemaining > 0 {
@@ -375,7 +383,7 @@ func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err e
 type Unsubscribe struct {
 	Header
 	MessageId uint16
-	Topics []string
+	Topics    []string
 }
 
 func (msg *Unsubscribe) Encode(w io.Writer) (err error) {
@@ -394,6 +402,8 @@ func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (
 	defer func() {
 		err = recoverError(err, recover())
 	}()
+
+	msg.Header = hdr
 
 	if qos := msg.Header.QosLevel; qos == 1 || qos == 2 {
 		msg.MessageId = getUint16(r, &packetRemaining)
@@ -434,6 +444,8 @@ func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32) (er
 	defer func() {
 		err = recoverError(err, recover())
 	}()
+
+	msg.Header = hdr
 
 	msg.MessageId = getUint16(r, &packetRemaining)
 

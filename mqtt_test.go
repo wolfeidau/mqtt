@@ -71,6 +71,49 @@ func Test(t *testing.T) {
 				gbt.Named{"Return code", gbt.Literal{4}},
 			},
 		},
+
+		{
+			Comment: "PUBLISH message with QoS = QosAtMostOnce",
+			Msg: &Publish{
+				Header: Header{
+					DupFlag:  false,
+					QosLevel: QosAtMostOnce,
+					Retain:   false,
+				},
+				TopicName: "a/b",
+				Data:      []byte{1, 2, 3},
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x30}},
+				gbt.Named{"Remaining length", gbt.Literal{5 + 3}},
+
+				gbt.Named{"Topic", gbt.Literal{0x00, 0x03, 'a', '/', 'b'}},
+				// No MessageId should be present.
+				gbt.Named{"Data", gbt.Literal{1, 2, 3}},
+			},
+		},
+
+		{
+			Comment: "PUBLISH message with QoS = QosAtLeastOnce",
+			Msg: &Publish{
+				Header: Header{
+					DupFlag:  true,
+					QosLevel: QosAtLeastOnce,
+					Retain:   false,
+				},
+				TopicName: "a/b",
+				MessageId: 0x1234,
+				Data:      []byte{1, 2, 3},
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x3a}},
+				gbt.Named{"Remaining length", gbt.Literal{7 + 3}},
+
+				gbt.Named{"Topic", gbt.Literal{0x00, 0x03, 'a', '/', 'b'}},
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
+				gbt.Named{"Data", gbt.Literal{1, 2, 3}},
+			},
+		},
 	}
 
 	for _, test := range tests {

@@ -30,7 +30,7 @@ func getUint16(r io.Reader, packetRemaining *int32) uint16 {
 	}
 	*packetRemaining -= 2
 
-	return uint16(b[0]<<8) + uint16(b[1])
+	return uint16(b[0])<<8 | uint16(b[1])
 }
 
 func getString(r io.Reader, packetRemaining *int32) string {
