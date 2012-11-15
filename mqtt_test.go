@@ -154,6 +154,26 @@ func Test(t *testing.T) {
 				gbt.Named{"Second topic QoS", gbt.Literal{2}},
 			},
 		},
+
+		{
+			Comment: "UNSUBSCRIBE message",
+			Msg: &Unsubscribe{
+				Header: Header{
+					DupFlag:  false,
+					QosLevel: QosAtLeastOnce,
+				},
+				MessageId: 0x4321,
+				Topics:    []string{"a/b", "c/d"},
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0xa2}},
+				gbt.Named{"Remaining length", gbt.Literal{2 + 5 + 5}},
+
+				gbt.Named{"MessageId", gbt.Literal{0x43, 0x21}},
+				gbt.Named{"First topic", gbt.Literal{0x00, 0x03, 'a', '/', 'b'}},
+				gbt.Named{"Second topic", gbt.Literal{0x00, 0x03, 'c', '/', 'd'}},
+			},
+		},
 	}
 
 	for _, test := range tests {
