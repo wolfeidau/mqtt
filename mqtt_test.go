@@ -81,7 +81,7 @@ func TestEncodeDecode(t *testing.T) {
 					Retain:   false,
 				},
 				TopicName: "a/b",
-				Data:      []byte{1, 2, 3},
+				Payload:   &BytesPayload{1, 2, 3},
 			},
 			Expected: gbt.InOrder{
 				gbt.Named{"Header byte", gbt.Literal{0x30}},
@@ -103,7 +103,7 @@ func TestEncodeDecode(t *testing.T) {
 				},
 				TopicName: "a/b",
 				MessageId: 0x1234,
-				Data:      []byte{1, 2, 3},
+				Payload:   &BytesPayload{1, 2, 3},
 			},
 			Expected: gbt.InOrder{
 				gbt.Named{"Header byte", gbt.Literal{0x3a}},
@@ -229,11 +229,11 @@ func TestErrorDecode(t *testing.T) {
 		Expected gbt.Matcher
 	}{
 		{
-			Comment: "Immediate EOF",
+			Comment:  "Immediate EOF",
 			Expected: gbt.Literal{},
 		},
 		{
-			Comment: "EOF at 1 byte",
+			Comment:  "EOF at 1 byte",
 			Expected: gbt.Literal{0x10},
 		},
 		{

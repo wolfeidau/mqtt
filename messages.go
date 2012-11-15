@@ -94,8 +94,8 @@ func (mt MessageType) IsValid() bool {
 	return mt >= MsgConnect && mt < msgTypeFirstInvalid
 }
 
-func writeMessage(w io.Writer, msgType MessageType, hdr *Header, payloadBuf *bytes.Buffer) error {
-	err := hdr.Encode(w, msgType, int32(len(payloadBuf.Bytes())))
+func writeMessage(w io.Writer, msgType MessageType, hdr *Header, payloadBuf *bytes.Buffer, extraLength int32) error {
+	err := hdr.Encode(w, msgType, int32(len(payloadBuf.Bytes()))+extraLength)
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (msg *Connect) Encode(w io.Writer) (err error) {
 		setString(msg.Password, buf)
 	}
 
-	return writeMessage(w, MsgConnect, &msg.Header, buf)
+	return writeMessage(w, MsgConnect, &msg.Header, buf, 0)
 }
 
 func (msg *Connect) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -210,7 +210,7 @@ func (msg *ConnAck) Encode(w io.Writer) (err error) {
 	buf.WriteByte(byte(0)) // Reserved byte.
 	setUint8(uint8(msg.ReturnCode), buf)
 
-	return writeMessage(w, MsgConnAck, &msg.Header, buf)
+	return writeMessage(w, MsgConnAck, &msg.Header, buf, 0)
 }
 
 func (msg *ConnAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -238,7 +238,7 @@ type Publish struct {
 	Header
 	TopicName string
 	MessageId uint16
-	Data      []byte
+	Payload   Payload
 }
 
 func (msg *Publish) Encode(w io.Writer) (err error) {
@@ -248,9 +248,12 @@ func (msg *Publish) Encode(w io.Writer) (err error) {
 	if msg.Header.QosLevel.HasId() {
 		setUint16(msg.MessageId, buf)
 	}
-	buf.Write(msg.Data)
 
-	return writeMessage(w, MsgPublish, &msg.Header, buf)
+	if err = writeMessage(w, MsgPublish, &msg.Header, buf, int32(msg.Payload.Size())); err != nil {
+		return
+	}
+
+	return msg.Payload.WritePayload(w)
 }
 
 func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -264,11 +267,8 @@ func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32) (err 
 	if msg.Header.QosLevel.HasId() {
 		msg.MessageId = getUint16(r, &packetRemaining)
 	}
-	msg.Data = make([]byte, packetRemaining)
-	if _, err = io.ReadFull(r, msg.Data); err != nil {
-		return err
-	}
-	return nil
+	msg.Payload = new(BytesPayload)
+	return msg.Payload.ReadPayload(&io.LimitedReader{r, int64(packetRemaining)}, int(packetRemaining))
 }
 
 // PubAck represents an MQTT PUBACK message.
@@ -329,7 +329,7 @@ func (msg *Subscribe) Encode(w io.Writer) (err error) {
 		setUint8(uint8(topicSub.Qos), buf)
 	}
 
-	return writeMessage(w, MsgSubscribe, &msg.Header, buf)
+	return writeMessage(w, MsgSubscribe, &msg.Header, buf, 0)
 }
 
 func (msg *Subscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -368,7 +368,7 @@ func (msg *SubAck) Encode(w io.Writer) (err error) {
 		setUint8(uint8(msg.TopicsQos[i]), buf)
 	}
 
-	return writeMessage(w, MsgSubAck, &msg.Header, buf)
+	return writeMessage(w, MsgSubAck, &msg.Header, buf, 0)
 }
 
 func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -405,7 +405,7 @@ func (msg *Unsubscribe) Encode(w io.Writer) (err error) {
 		setString(topic, buf)
 	}
 
-	return writeMessage(w, MsgUnsubscribe, &msg.Header, buf)
+	return writeMessage(w, MsgUnsubscribe, &msg.Header, buf, 0)
 }
 
 func (msg *Unsubscribe) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
@@ -495,7 +495,7 @@ func (msg *AckCommon) encode(w io.Writer, msgType MessageType) (err error) {
 	buf := new(bytes.Buffer)
 	setUint16(msg.MessageId, buf)
 
-	return writeMessage(w, msgType, &msg.Header, buf)
+	return writeMessage(w, msgType, &msg.Header, buf, 0)
 }
 
 func (msg *AckCommon) Decode(r io.Reader, hdr Header, packetRemaining int32) (err error) {
