@@ -50,7 +50,9 @@
 // valid.
 //
 // More complex handling is possible by implementing the Payload interface,
-// which can be injected into DecodeOneMessage via the `config` parameter. Potential benefits of this include:
+// which can be injected into DecodeOneMessage via the `config` parameter, or
+// into an outgoing Publish message via its Payload field.  Potential benefits
+// of this include:
 //
 // * Data can be (un)marshalled directly on a connection, without an unecessary
 // round-trip via bytes.Buffer.
