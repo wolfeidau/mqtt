@@ -24,6 +24,7 @@ type Payload interface {
 	ReadPayload(r io.Reader) error
 }
 
+// BytesPayload reads/writes a plain slice of bytes.
 type BytesPayload []byte
 
 func (p BytesPayload) Size() int {
@@ -37,5 +38,36 @@ func (p BytesPayload) WritePayload(w io.Writer) error {
 
 func (p BytesPayload) ReadPayload(r io.Reader) error {
 	_, err := io.ReadFull(r, p)
+	return err
+}
+
+// StreamedPayload writes payload data from reader, or reads payload data into a writer.
+type StreamedPayload struct {
+	// N indicates payload size to the encoder. This many bytes will be read from
+	// the reader when encoding. The number of bytes in the payload will be
+	// stored here when decoding.
+	N int
+
+	// EncodingSource is used to copy data from when encoding a Publish message
+	// onto the wire. This can be
+	EncodingSource io.Reader
+
+	// DecodingSink is used to copy data to when decoding a Publish message from
+	// the wire. This can be nil if the payload is only being used for encoding.
+	DecodingSink io.Writer
+}
+
+func (p *StreamedPayload) Size() int {
+	return p.N
+}
+
+func (p *StreamedPayload) WritePayload(w io.Writer) error {
+	_, err := io.CopyN(w, p.EncodingSource, int64(p.N))
+	return err
+}
+
+func (p *StreamedPayload) ReadPayload(r io.Reader) error {
+	n, err := io.Copy(p.DecodingSink, r)
+	p.N = int(n)
 	return err
 }

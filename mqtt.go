@@ -67,6 +67,15 @@ func (c DefaultDecoderConfig) MakePayload(msg *Publish, r io.Reader, n int) (Pay
 	return make(BytesPayload, n), nil
 }
 
+// ValueConfig always returns the given Payload when MakePayload is called.
+type ValueConfig struct {
+	Payload Payload
+}
+
+func (c *ValueConfig) MakePayload(msg *Publish, r io.Reader, n int) (Payload, error) {
+	return c.Payload, nil
+}
+
 // DecodeOneMessage decodes one message from r. config provides specifics on
 // how to decode messages, nil indicates that the DefaultDecoderConfig should
 // be used.

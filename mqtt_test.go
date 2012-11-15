@@ -436,3 +436,110 @@ func TestLengthEncodeDecode(t *testing.T) {
 		}
 	}
 }
+
+type SeqBytePayload struct {
+	N int
+	T *testing.T
+}
+
+func (p *SeqBytePayload) Size() int {
+	return p.N
+}
+
+func (p *SeqBytePayload) WritePayload(w io.Writer) error {
+	buf := make([]byte, 256)
+	for i := range buf {
+		buf[i] = byte(i)
+	}
+
+	for toWrite := p.N; toWrite > 0; toWrite -= 256 {
+		writeThisTime := toWrite
+		if writeThisTime > 256 {
+			writeThisTime = 256
+		}
+		if _, err := w.Write(buf[:writeThisTime]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *SeqBytePayload) ReadPayload(r io.Reader) error {
+	buf := make([]byte, 256)
+
+	for toRead := p.N; toRead > 0; toRead -= 256 {
+		readThisTime := toRead
+		if readThisTime > 256 {
+			readThisTime = 256
+		}
+		if _, err := io.ReadFull(r, buf[:readThisTime]); err != nil {
+			p.T.Errorf("Got unexpected error %v", err)
+			return err
+		}
+		for i, v := range buf[:readThisTime] {
+			if v != byte(i) {
+				p.T.Errorf("Got unexpected byte %#x, expected %#x", v, i)
+				return io.ErrClosedPipe
+			}
+		}
+	}
+
+	// Any more reads should produce an EOF.
+	if n, err := r.Read(buf); n > 0 {
+		p.T.Errorf("Got unexpected extra %d bytes of data", n)
+	} else if err != io.EOF {
+		p.T.Errorf("Expected err=EOF, got %v", err)
+	}
+
+	return nil
+}
+
+// Stream a reasonably large Publish payload containing sequential byte values.
+func TestPipedPublish(t *testing.T) {
+	r, w := io.Pipe()
+
+	complete := make(chan bool)
+
+	payload := &SeqBytePayload{
+		N: 20 + (1 << 20),
+		T: t,
+	}
+
+	go func() {
+		defer func() {
+			complete <- true
+			w.Close()
+		}()
+
+		msg := &Publish{
+			TopicName: "foo",
+			Payload:   payload,
+		}
+		if err := msg.Encode(w); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	go func() {
+		defer func() {
+			complete <- true
+			r.Close()
+		}()
+
+		expectedMsg := &Publish{
+			TopicName: "foo",
+			Payload:   payload,
+		}
+
+		testConfig := &ValueConfig{payload}
+
+		if msg, err := DecodeOneMessage(r, testConfig); err != nil {
+			t.Error(err)
+		} else if !reflect.DeepEqual(expectedMsg, msg) {
+			t.Errorf("     got = %#v\nexpected = %#v", msg, expectedMsg)
+		}
+	}()
+
+	_ = <-complete
+	_ = <-complete
+}
