@@ -60,6 +60,9 @@ func DecodeOneMessage(r io.Reader) (msg Message, err error) {
 	msgType, packetRemaining, err = hdr.Decode(r)
 
 	msg, err = NewMessage(msgType)
+	if err != nil {
+		return
+	}
 
 	return msg, msg.Decode(r, hdr, packetRemaining)
 }
@@ -90,6 +93,12 @@ func NewMessage(msgType MessageType) (msg Message, err error) {
 		msg = new(SubAck)
 	case MsgUnsubscribe:
 		msg = new(Unsubscribe)
+	case MsgPingReq:
+		msg = new(PingReq)
+	case MsgPingResp:
+		msg = new(PingResp)
+	case MsgDisconnect:
+		msg = new(Disconnect)
 	default:
 		return nil, badMsgTypeError
 	}

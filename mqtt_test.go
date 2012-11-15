@@ -174,7 +174,36 @@ func Test(t *testing.T) {
 				gbt.Named{"Second topic", gbt.Literal{0x00, 0x03, 'c', '/', 'd'}},
 			},
 		},
+
+		{
+			Comment: "PINGREQ message",
+			Msg:     &PingReq{},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0xc0}},
+				gbt.Named{"Remaining length", gbt.Literal{0}},
+			},
+		},
+
+		{
+			Comment: "PINGRESP message",
+			Msg:     &PingResp{},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0xd0}},
+				gbt.Named{"Remaining length", gbt.Literal{0}},
+			},
+		},
+
+		{
+			Comment: "DISCONNECT message",
+			Msg:     &Disconnect{},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0xe0}},
+				gbt.Named{"Remaining length", gbt.Literal{0}},
+			},
+		},
 	}
+
+	// TODO: Test (error cases?) for packets with spurious remaining lengths.
 
 	for _, test := range tests {
 		encodedBuf := new(bytes.Buffer)

@@ -428,6 +428,45 @@ func (msg *UnsubAck) Encode(w io.Writer) error {
 	return msg.AckCommon.encode(w, MsgUnsubAck)
 }
 
+// PingReq represents an MQTT PINGREQ message.
+type PingReq struct {
+	Header
+}
+
+func (msg *PingReq) Encode(w io.Writer) error {
+	return msg.Header.Encode(w, MsgPingReq, 0)
+}
+
+func (msg *PingReq) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+	return nil
+}
+
+// PingResp represents an MQTT PINGRESP message.
+type PingResp struct {
+	Header
+}
+
+func (msg *PingResp) Encode(w io.Writer) error {
+	return msg.Header.Encode(w, MsgPingResp, 0)
+}
+
+func (msg *PingResp) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+	return nil
+}
+
+// Disconnect represents an MQTT DISCONNECT message.
+type Disconnect struct {
+	Header
+}
+
+func (msg *Disconnect) Encode(w io.Writer) error {
+	return msg.Header.Encode(w, MsgDisconnect, 0)
+}
+
+func (msg *Disconnect) Decode(r io.Reader, hdr Header, packetRemaining int32) error {
+	return nil
+}
+
 // AckCommon is not an actual message, but represents the common elements of
 // many similar messages.
 type AckCommon struct {
