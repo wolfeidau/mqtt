@@ -35,6 +35,7 @@ func TestEncodeDecode(t *testing.T) {
 		DecoderConfig DecoderConfig
 		Msg           Message
 		Expected      gbt.Matcher
+		NoEncodeTest  bool
 	}{
 		{
 			Comment: "CONNECT message",
@@ -294,21 +295,27 @@ func TestEncodeDecode(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		encodedBuf := new(bytes.Buffer)
-		if err := test.Msg.Encode(encodedBuf); err != nil {
-			t.Errorf("%s: Unexpected error during encoding: %v", test.Comment, err)
-		} else if err = gbt.Matches(test.Expected, encodedBuf.Bytes()); err != nil {
-			t.Errorf("%s: Unexpected encoding output: %v", test.Comment, err)
+		{
+			// Test decoding.
+			expectedBuf := new(bytes.Buffer)
+			test.Expected.Write(expectedBuf)
+
+			if decodedMsg, err := DecodeOneMessage(expectedBuf, test.DecoderConfig); err != nil {
+				t.Errorf("%s: Unexpected error during decoding: %v", test.Comment, err)
+			} else if !reflect.DeepEqual(test.Msg, decodedMsg) {
+				t.Errorf("%s: Decoded value mismatch\n     got = %#v\nexpected = %#v",
+					test.Comment, decodedMsg, test.Msg)
+			}
 		}
 
-		expectedBuf := new(bytes.Buffer)
-		test.Expected.Write(expectedBuf)
-
-		if decodedMsg, err := DecodeOneMessage(expectedBuf, test.DecoderConfig); err != nil {
-			t.Errorf("%s: Unexpected error during decoding: %v", test.Comment, err)
-		} else if !reflect.DeepEqual(test.Msg, decodedMsg) {
-			t.Errorf("%s: Decoded value mismatch\n     got = %#v\nexpected = %#v",
-				test.Comment, decodedMsg, test.Msg)
+		if !test.NoEncodeTest {
+			// Test encoding.
+			encodedBuf := new(bytes.Buffer)
+			if err := test.Msg.Encode(encodedBuf); err != nil {
+				t.Errorf("%s: Unexpected error during encoding: %v", test.Comment, err)
+			} else if err = gbt.Matches(test.Expected, encodedBuf.Bytes()); err != nil {
+				t.Errorf("%s: Unexpected encoding output: %v", test.Comment, err)
+			}
 		}
 	}
 }
