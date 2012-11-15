@@ -29,6 +29,7 @@
 // Create a message value, and use its Encode method to write it to an
 // io.Writer. For example:
 //
+//   someData := []byte{1, 2, 3}
 //   msg := &Publish{
 //     Header: {
 //       DupFlag: false,
@@ -37,7 +38,7 @@
 //     },
 //     TopicName: "a/b",
 //     MessageId: 10,
-//     Payload: BytesPayload(someBytesData),
+//     Payload: BytesPayload(someData),
 //   }
 //   if err := msg.Encode(conn); err != nil {
 //     // handle err
@@ -47,8 +48,7 @@
 //
 // The default behaviour for decoding PUBLISH payloads, and most common way to
 // supply payloads for encoding, is the BytesPayload, which is a []byte
-// derivative, i.e someData := []byte{1, 2, 3}; BytesPayload(someData) is
-// valid.
+// derivative.
 //
 // More complex handling is possible by implementing the Payload interface,
 // which can be injected into DecodeOneMessage via the `config` parameter, or
