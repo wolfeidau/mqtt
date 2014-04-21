@@ -15,8 +15,8 @@ func (p fakeSizePayload) Size() int {
 	return int(p)
 }
 
-func (p fakeSizePayload) WritePayload(w io.Writer) error {
-	return nil
+func (p fakeSizePayload) WritePayload(w io.Writer) (int, error) {
+	return 0, nil
 }
 
 func (p fakeSizePayload) ReadPayload(r io.Reader) error {
@@ -311,7 +311,7 @@ func TestEncodeDecode(t *testing.T) {
 		if !test.NoEncodeTest {
 			// Test encoding.
 			encodedBuf := new(bytes.Buffer)
-			if err := test.Msg.Encode(encodedBuf); err != nil {
+			if _, err := test.Msg.Encode(encodedBuf); err != nil {
 				t.Errorf("%s: Unexpected error during encoding: %v", test.Comment, err)
 			} else if err = gbt.Matches(test.Expected, encodedBuf.Bytes()); err != nil {
 				t.Errorf("%s: Unexpected encoding output: %v", test.Comment, err)
@@ -347,7 +347,7 @@ func TestErrorEncode(t *testing.T) {
 
 	for _, test := range tests {
 		encodedBuf := new(bytes.Buffer)
-		if err := test.Msg.Encode(encodedBuf); err == nil {
+		if _, err := test.Msg.Encode(encodedBuf); err == nil {
 			t.Errorf("%s: Expected error during encoding, but got nil.", test.Comment)
 		}
 	}
@@ -446,7 +446,7 @@ func (p *SeqBytePayload) Size() int {
 	return p.N
 }
 
-func (p *SeqBytePayload) WritePayload(w io.Writer) error {
+func (p *SeqBytePayload) WritePayload(w io.Writer) (int, error) {
 	buf := make([]byte, 256)
 	for i := range buf {
 		buf[i] = byte(i)
@@ -458,10 +458,10 @@ func (p *SeqBytePayload) WritePayload(w io.Writer) error {
 			writeThisTime = 256
 		}
 		if _, err := w.Write(buf[:writeThisTime]); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return p.N, nil
 }
 
 func (p *SeqBytePayload) ReadPayload(r io.Reader) error {
@@ -515,7 +515,7 @@ func TestPipedPublish(t *testing.T) {
 			TopicName: "foo",
 			Payload:   payload,
 		}
-		if err := msg.Encode(w); err != nil {
+		if _, err := msg.Encode(w); err != nil {
 			t.Error(err)
 		}
 	}()

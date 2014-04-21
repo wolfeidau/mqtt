@@ -16,7 +16,7 @@ type Payload interface {
 	// Size() bytes of data, but it is *not* required to do so prior to
 	// returning. Size() bytes must have been written to w prior to another
 	// message being encoded to the underlying connection.
-	WritePayload(w io.Writer) error
+	WritePayload(w io.Writer) (int, error)
 
 	// ReadPayload reads the payload data from r (r will EOF at the end of the
 	// payload). It is *not* required for r to have been consumed prior to this
@@ -32,9 +32,8 @@ func (p BytesPayload) Size() int {
 	return len(p)
 }
 
-func (p BytesPayload) WritePayload(w io.Writer) error {
-	_, err := w.Write(p)
-	return err
+func (p BytesPayload) WritePayload(w io.Writer) (int, error) {
+	return w.Write(p)
 }
 
 func (p BytesPayload) ReadPayload(r io.Reader) error {
@@ -62,9 +61,9 @@ func (p *StreamedPayload) Size() int {
 	return p.N
 }
 
-func (p *StreamedPayload) WritePayload(w io.Writer) error {
-	_, err := io.CopyN(w, p.EncodingSource, int64(p.N))
-	return err
+func (p *StreamedPayload) WritePayload(w io.Writer) (int, error) {
+	c, err := io.CopyN(w, p.EncodingSource, int64(p.N))
+	return int(c), err
 }
 
 func (p *StreamedPayload) ReadPayload(r io.Reader) error {

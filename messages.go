@@ -17,14 +17,13 @@ type Header struct {
 	QosLevel        QosLevel
 }
 
-func (hdr *Header) Encode(w io.Writer, msgType MessageType, remainingLength int32) error {
+func (hdr *Header) Encode(w io.Writer, msgType MessageType, remainingLength int32) (int, error) {
 	buf := new(bytes.Buffer)
 	err := hdr.encodeInto(buf, msgType, remainingLength)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	_, err = w.Write(buf.Bytes())
-	return err
+	return w.Write(buf.Bytes())
 }
 
 func (hdr *Header) encodeInto(buf *bytes.Buffer, msgType MessageType, remainingLength int32) error {
@@ -72,7 +71,7 @@ func (hdr *Header) Decode(r io.Reader) (msgType MessageType, remainingLength int
 // Message is the interface that all MQTT messages implement.
 type Message interface {
 	// Encode writes the message to w.
-	Encode(w io.Writer) error
+	Encode(w io.Writer) (int, error)
 
 	// Decode reads the message extended headers and payload from
 	// r. Typically the values for hdr and packetRemaining will
@@ -107,22 +106,21 @@ func (mt MessageType) IsValid() bool {
 	return mt >= MsgConnect && mt < msgTypeFirstInvalid
 }
 
-func writeMessage(w io.Writer, msgType MessageType, hdr *Header, payloadBuf *bytes.Buffer, extraLength int32) error {
+func writeMessage(w io.Writer, msgType MessageType, hdr *Header, payloadBuf *bytes.Buffer, extraLength int32) (int, error) {
 	totalPayloadLength := int64(len(payloadBuf.Bytes())) + int64(extraLength)
 	if totalPayloadLength > MaxPayloadSize {
-		return msgTooLongError
+		return 0, msgTooLongError
 	}
 
 	buf := new(bytes.Buffer)
 	err := hdr.encodeInto(buf, msgType, int32(totalPayloadLength))
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	buf.Write(payloadBuf.Bytes())
-	_, err = w.Write(buf.Bytes())
 
-	return err
+	return w.Write(buf.Bytes())
 }
 
 // Connect represents an MQTT CONNECT message.
@@ -141,9 +139,9 @@ type Connect struct {
 	Username, Password         string
 }
 
-func (msg *Connect) Encode(w io.Writer) (err error) {
+func (msg *Connect) Encode(w io.Writer) (int, error) {
 	if !msg.WillQos.IsValid() {
-		return badWillQosError
+		return 0, badWillQosError
 	}
 
 	buf := new(bytes.Buffer)
@@ -224,7 +222,7 @@ type ConnAck struct {
 	ReturnCode ReturnCode
 }
 
-func (msg *ConnAck) Encode(w io.Writer) (err error) {
+func (msg *ConnAck) Encode(w io.Writer) (int, error) {
 	buf := new(bytes.Buffer)
 
 	buf.WriteByte(byte(0)) // Reserved byte.
@@ -261,7 +259,7 @@ type Publish struct {
 	Payload   Payload
 }
 
-func (msg *Publish) Encode(w io.Writer) (err error) {
+func (msg *Publish) Encode(w io.Writer) (int, error) {
 	buf := new(bytes.Buffer)
 
 	setString(msg.TopicName, buf)
@@ -269,11 +267,15 @@ func (msg *Publish) Encode(w io.Writer) (err error) {
 		setUint16(msg.MessageId, buf)
 	}
 
-	if err = writeMessage(w, MsgPublish, &msg.Header, buf, int32(msg.Payload.Size())); err != nil {
-		return
+	n, err := writeMessage(w, MsgPublish, &msg.Header, buf, int32(msg.Payload.Size()))
+
+	if err != nil {
+		return 0, err
 	}
 
-	return msg.Payload.WritePayload(w)
+	p, err := msg.Payload.WritePayload(w)
+
+	return (n + p), nil
 }
 
 func (msg *Publish) Decode(r io.Reader, hdr Header, packetRemaining int32, config DecoderConfig) (err error) {
@@ -303,7 +305,7 @@ type PubAck struct {
 	MessageId uint16
 }
 
-func (msg *PubAck) Encode(w io.Writer) error {
+func (msg *PubAck) Encode(w io.Writer) (int, error) {
 	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubAck)
 }
 
@@ -318,7 +320,7 @@ type PubRec struct {
 	MessageId uint16
 }
 
-func (msg *PubRec) Encode(w io.Writer) error {
+func (msg *PubRec) Encode(w io.Writer) (int, error) {
 	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubRec)
 }
 
@@ -333,7 +335,7 @@ type PubRel struct {
 	MessageId uint16
 }
 
-func (msg *PubRel) Encode(w io.Writer) error {
+func (msg *PubRel) Encode(w io.Writer) (int, error) {
 	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubRel)
 }
 
@@ -348,7 +350,7 @@ type PubComp struct {
 	MessageId uint16
 }
 
-func (msg *PubComp) Encode(w io.Writer) error {
+func (msg *PubComp) Encode(w io.Writer) (int, error) {
 	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgPubComp)
 }
 
@@ -369,7 +371,7 @@ type TopicQos struct {
 	Qos   QosLevel
 }
 
-func (msg *Subscribe) Encode(w io.Writer) (err error) {
+func (msg *Subscribe) Encode(w io.Writer) (int, error) {
 	buf := new(bytes.Buffer)
 	if msg.Header.QosLevel.HasId() {
 		setUint16(msg.MessageId, buf)
@@ -411,7 +413,7 @@ type SubAck struct {
 	TopicsQos []QosLevel
 }
 
-func (msg *SubAck) Encode(w io.Writer) (err error) {
+func (msg *SubAck) Encode(w io.Writer) (int, error) {
 	buf := new(bytes.Buffer)
 	setUint16(msg.MessageId, buf)
 	for i := 0; i < len(msg.TopicsQos); i += 1 {
@@ -446,7 +448,7 @@ type Unsubscribe struct {
 	Topics    []string
 }
 
-func (msg *Unsubscribe) Encode(w io.Writer) (err error) {
+func (msg *Unsubscribe) Encode(w io.Writer) (int, error) {
 	buf := new(bytes.Buffer)
 	if msg.Header.QosLevel.HasId() {
 		setUint16(msg.MessageId, buf)
@@ -483,7 +485,7 @@ type UnsubAck struct {
 	MessageId uint16
 }
 
-func (msg *UnsubAck) Encode(w io.Writer) error {
+func (msg *UnsubAck) Encode(w io.Writer) (int, error) {
 	return encodeAckCommon(w, &msg.Header, msg.MessageId, MsgUnsubAck)
 }
 
@@ -497,7 +499,7 @@ type PingReq struct {
 	Header
 }
 
-func (msg *PingReq) Encode(w io.Writer) error {
+func (msg *PingReq) Encode(w io.Writer) (int, error) {
 	return msg.Header.Encode(w, MsgPingReq, 0)
 }
 
@@ -513,7 +515,7 @@ type PingResp struct {
 	Header
 }
 
-func (msg *PingResp) Encode(w io.Writer) error {
+func (msg *PingResp) Encode(w io.Writer) (int, error) {
 	return msg.Header.Encode(w, MsgPingResp, 0)
 }
 
@@ -529,7 +531,7 @@ type Disconnect struct {
 	Header
 }
 
-func (msg *Disconnect) Encode(w io.Writer) error {
+func (msg *Disconnect) Encode(w io.Writer) (int, error) {
 	return msg.Header.Encode(w, MsgDisconnect, 0)
 }
 
@@ -540,7 +542,7 @@ func (msg *Disconnect) Decode(r io.Reader, hdr Header, packetRemaining int32, co
 	return nil
 }
 
-func encodeAckCommon(w io.Writer, hdr *Header, messageId uint16, msgType MessageType) error {
+func encodeAckCommon(w io.Writer, hdr *Header, messageId uint16, msgType MessageType) (int, error) {
 	buf := new(bytes.Buffer)
 	setUint16(messageId, buf)
 	return writeMessage(w, msgType, hdr, buf, 0)
