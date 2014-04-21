@@ -237,6 +237,20 @@ func TestEncodeDecode(t *testing.T) {
 		},
 
 		{
+			Comment: "SUBACK message with Failure",
+			Msg: &SubAck{
+				MessageId: 0x1234,
+				TopicsQos: []QosLevel{QosAtMostOnce, QosRejected},
+			},
+			Expected: gbt.InOrder{
+				gbt.Named{"Header byte", gbt.Literal{0x90}},
+				gbt.Named{"Remaining length", gbt.Literal{4}},
+				gbt.Named{"MessageId", gbt.Literal{0x12, 0x34}},
+				gbt.Named{"TopicsQos", gbt.Literal{0x00, 0x80}},
+			},
+		},
+
+		{
 			Comment: "UNSUBSCRIBE message",
 			Msg: &Unsubscribe{
 				Header: Header{

@@ -433,7 +433,7 @@ func (msg *SubAck) Decode(r io.Reader, hdr Header, packetRemaining int32, config
 	msg.MessageId = getUint16(r, &packetRemaining)
 	topicsQos := make([]QosLevel, 0)
 	for packetRemaining > 0 {
-		grantedQos := QosLevel(getUint8(r, &packetRemaining) & 0x03)
+		grantedQos := QosLevel(getUint8(r, &packetRemaining))
 		topicsQos = append(topicsQos, grantedQos)
 	}
 	msg.TopicsQos = topicsQos

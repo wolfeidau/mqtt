@@ -91,13 +91,13 @@ const (
 	QosAtLeastOnce
 	QosExactlyOnce
 
-	qosFirstInvalid
+	QosRejected = QosLevel(128)
 )
 
 type QosLevel uint8
 
 func (qos QosLevel) IsValid() bool {
-	return qos < qosFirstInvalid
+	return qos == QosAtMostOnce || qos == QosAtLeastOnce || qos == QosExactlyOnce || qos == QosRejected
 }
 
 func (qos QosLevel) HasId() bool {
